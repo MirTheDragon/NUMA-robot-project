@@ -38,7 +38,7 @@ const float rareMinDilation   = 0.20f;
 const float rareMaxDilation   = 0.40f;  // Maximum size for rare dilation (e.g. not more than 75%)
 const float rareMinChance     = 0.20f;
 
-const SDL_Color glowColor     = {64, 200, 255, 5};
+const SDL_Color glowColor     = {64, 200, 255, 8};
 const SDL_Color eyeFillColor  = {20, 220, 255, 255};
 const SDL_Color pupilColor    = {255, 255, 255, 220};
 const int glowPadding = 80;
