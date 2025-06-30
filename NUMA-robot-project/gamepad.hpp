@@ -7,6 +7,8 @@
 #include <cmath>
 
 struct Joystick {
+    float x_raw = 0;
+    float y_raw = 0;
     float x = 0;
     float y = 0;
     float magnitude = 0;
@@ -55,6 +57,8 @@ public:
     void addCombo(const std::string& holdButton, const std::vector<std::string>& sequence, const std::string& eventName);
     bool isButtonPressed(const std::string& name) const;
     std::vector<GamepadEvent> pollEvents();
+    
+    void printJoystickAndTriggerChanges();
 
 private:
     int fd = -1;
@@ -63,6 +67,11 @@ private:
     std::map<int, std::string> buttonMap;
     std::map<std::string, bool> buttonStates;
     std::map<std::string, bool> previousButtonStates;
+
+    // For tracking previous joystick/trigger values to detect change
+    Joystick prevLeftStick;
+    Joystick prevRightStick;
+    Triggers prevTriggers;
 
     Joystick leftStick;
     Joystick rightStick;
@@ -76,5 +85,7 @@ private:
     void scanDevices();
     void handleEvent(const input_event& ev);
     void updateJoysticks();
+    static void squareToCircle(float x_in, float y_in, float &x_out, float &y_out);
+
     void detectCombos();
 };

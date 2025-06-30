@@ -81,6 +81,8 @@ int main() {
         
         pad.update(state);
 
+        pad.printJoystickAndTriggerChanges();
+
         // Get events (including combos, button press/releases)
         auto events = pad.pollEvents();
         for (const auto& ev : events) {

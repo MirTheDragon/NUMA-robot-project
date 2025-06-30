@@ -13,6 +13,9 @@
 #include <iostream>
 #include <algorithm>
 
+
+static constexpr float EPSILON = 0.01f;
+
 GamepadController::GamepadController() {
     fd = -1;
     scanDevices();
@@ -259,10 +262,10 @@ void GamepadController::handleEvent(const input_event& ev) {
         }
     } else if (ev.type == EV_ABS) {
         switch (ev.code) {
-            case 0: leftStick.x = ev.value / 32767.0f; break;
-            case 1: leftStick.y = ev.value / 32767.0f; break;
-            case 3: rightStick.x = ev.value / 32767.0f; break;
-            case 4: rightStick.y = ev.value / 32767.0f; break;
+            case 0: leftStick.x_raw = ev.value / 32767.0f; break;
+            case 1: leftStick.y_raw = ev.value / 32767.0f; break;
+            case 3: rightStick.x_raw = ev.value / 32767.0f; break;
+            case 4: rightStick.y_raw = ev.value / 32767.0f; break;
             case 2: triggers.left = ev.value / 255.0f; break;
             case 5: triggers.right = ev.value / 255.0f; break;
 
@@ -300,12 +303,17 @@ void GamepadController::handleEvent(const input_event& ev) {
 }
 
 void GamepadController::updateJoysticks() {
+    // Circularize left stick
+    squareToCircle(leftStick.x_raw, leftStick.y_raw, leftStick.x, leftStick.y);
     leftStick.magnitude = std::sqrt(leftStick.x * leftStick.x + leftStick.y * leftStick.y);
     leftStick.angle = std::atan2(leftStick.y, leftStick.x);
 
+    // Circularize right stick
+    squareToCircle(rightStick.x_raw, rightStick.y_raw, rightStick.x, rightStick.y);
     rightStick.magnitude = std::sqrt(rightStick.x * rightStick.x + rightStick.y * rightStick.y);
     rightStick.angle = std::atan2(rightStick.y, rightStick.x);
 }
+
 
 void GamepadController::addCombo(const std::string& holdButton, const std::vector<std::string>& sequence, const std::string& eventName) {
     std::string key = holdButton + ":";
@@ -356,4 +364,53 @@ std::vector<GamepadEvent> GamepadController::pollEvents() {
     auto out = pendingEvents;
     pendingEvents.clear();
     return out;
+}
+
+// Convert square input range [-1,1]x[-1,1] to circular range with magnitude capped at 1
+void GamepadController::squareToCircle(float x_in, float y_in, float &x_out, float &y_out) {
+    // Clamp inputs just in case (optional)
+    float x = std::max(-1.0f, std::min(1.0f, x_in));
+    float y = std::max(-1.0f, std::min(1.0f, y_in));
+
+    // Apply the formula from https://www.gamasutra.com/view/feature/131790/simple_but_effective_trigonometry.php
+    x_out = x * std::sqrt(1.0f - (y * y) / 2.0f);
+    y_out = y * std::sqrt(1.0f - (x * x) / 2.0f);
+}
+
+
+void GamepadController::printJoystickAndTriggerChanges() {
+    auto changed = [](float a, float b) {
+        return std::fabs(a - b) > EPSILON;
+    };
+
+    bool leftChanged = changed(leftStick.x, prevLeftStick.x) ||
+                       changed(leftStick.y, prevLeftStick.y) ||
+                       changed(leftStick.magnitude, prevLeftStick.magnitude);
+
+    bool rightChanged = changed(rightStick.x, prevRightStick.x) ||
+                        changed(rightStick.y, prevRightStick.y) ||
+                        changed(rightStick.magnitude, prevRightStick.magnitude);
+
+    bool triggersChanged = changed(triggers.left, prevTriggers.left) ||
+                           changed(triggers.right, prevTriggers.right);
+
+    if (leftChanged) {
+        std::cout << "Left Stick - X: " << leftStick.x
+                  << ", Y: " << leftStick.y
+                  << ", Magnitude: " << leftStick.magnitude << "\n";
+        prevLeftStick = leftStick;
+    }
+
+    if (rightChanged) {
+        std::cout << "Right Stick - X: " << rightStick.x
+                  << ", Y: " << rightStick.y
+                  << ", Magnitude: " << rightStick.magnitude << "\n";
+        prevRightStick = rightStick;
+    }
+
+    if (triggersChanged) {
+        std::cout << "Triggers - Left: " << triggers.left
+                  << ", Right: " << triggers.right << "\n";
+        prevTriggers = triggers;
+    }
 }
