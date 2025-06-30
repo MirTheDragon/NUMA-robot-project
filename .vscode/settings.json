@@ -50,6 +50,12 @@
         "stop_token": "cpp",
         "streambuf": "cpp",
         "cinttypes": "cpp",
-        "typeinfo": "cpp"
+        "typeinfo": "cpp",
+        "codecvt": "cpp",
+        "map": "cpp",
+        "iomanip": "cpp",
+        "filesystem": "cpp",
+        "csignal": "cpp",
+        "cstring": "cpp"
     }
 }

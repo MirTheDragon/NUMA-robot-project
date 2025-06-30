@@ -1,0 +1,22 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "/usr/include",
+                "/usr/local/include",
+                "/usr/include/libevdev-1.0/libevdev",
+                "/usr/include/c++/11",
+                "/usr/include/arm-linux-gnueabihf",
+                "/usr/include/libevdev-1.0"
+            ],
+            "intelliSenseMode": "linux-gcc",
+            "defines": [],
+            "compilerPath": "/usr/bin/g++",
+            "cStandard": "c11",
+            "cppStandard": "c++17"
+        }
+    ],
+    "version": 4
+}
