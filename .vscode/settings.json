@@ -57,6 +57,7 @@
         "filesystem": "cpp",
         "csignal": "cpp",
         "cstring": "cpp",
-        "fstream": "cpp"
+        "fstream": "cpp",
+        "optional": "cpp"
     }
 }
