@@ -14,7 +14,10 @@ struct ServoMapping {
 
 class RobotController {
 public:
-    RobotController();
+
+    static constexpr size_t kNumLegs = 6;
+    size_t legCount_ = 6; // Number of legs, default to 6
+    RobotController(int legCount);
 
     int initialize();
     void updateAllIK();
@@ -23,21 +26,23 @@ public:
     void updateKinematicsAndApply();
 
     void setFootTarget(size_t legIndex, const Vec3& target);
+    const ServoMapping& getServoMapping(size_t legIndex, size_t jointIndex);
+
+    
+    RobotBody Body;  // Added robot body instance
+    std::array<ThreePointLeg, kNumLegs> legs; // Array of legs, each leg is a ThreePointLeg instance
+
     ThreePointLeg& getLeg(size_t legIndex);
-    ServoController& getServoController(size_t controllerIndex);
+    const ServoMapping& getServoMapping(size_t legIndex, size_t jointIndex) const;
+
 
 
 
 private:
-    static constexpr size_t kNumLegs = 6;
     static constexpr size_t kJointsPerLeg = 3;
     static constexpr size_t kNumControllers = 2;
     static constexpr size_t kChannelsPerController = 16;
 
-    
-    RobotBody Body_;  // Added robot body instance
-
-    std::array<ThreePointLeg, kNumLegs> legs_; // Array of legs, each leg is a ThreePointLeg instance
     std::array<ServoController, kNumControllers> servoControllers_; // Array of servo controllers
     std::array<std::array<ServoMapping, kJointsPerLeg>, kNumLegs> servoMappings_; // Mappings from legs to servo controllers and channels
 

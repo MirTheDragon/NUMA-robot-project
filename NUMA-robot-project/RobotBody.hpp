@@ -3,14 +3,6 @@
 #include <array>
 #include "ThreePointLeg.hpp"
 
-struct Vec3 {
-    float x;
-    float y;
-    float z;
-
-    Vec3() : x(0.f), y(0.f), z(0.f) {}
-    Vec3(float x_, float y_, float z_) : x(x_), y(y_), z(z_) {}
-};
 
 class RobotBody {
 public:

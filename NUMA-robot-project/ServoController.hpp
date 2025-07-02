@@ -27,10 +27,21 @@ struct ServoConfig {
 
 class ServoController {
 public:
+    uint8_t i2cBus_;
+    uint8_t deviceAddress_;
+    uint16_t pwmFrequency_;
+    int fd_;
+    
     ServoController(uint8_t i2cBus, uint8_t deviceAddress, uint16_t pwmFrequencyHz);
 
     // Initialize the hardware (open I2C, setup PWM frequency)
     int initialize();
+
+    
+
+    void setInitialized(bool val) { isInitialized_ = val; }
+    bool isInitialized() const { return isInitialized_; }
+    uint8_t getDeviceAddress() const { return deviceAddress_; }
 
     // Set the servo config for a given channel (0-15)
     void setServoConfig(size_t channel, const ServoConfig& config);
@@ -47,10 +58,8 @@ public:
     int findServoByName(const std::string& name) const;
 
 private:
-    uint8_t i2cBus_;
-    uint8_t deviceAddress_;
-    uint16_t pwmFrequency_;
-    int fd_;
+    
+    bool isInitialized_ = false;
 
     std::array<ServoConfig, 16> servoConfigs_;
     std::array<float, 16> servoAngles_;  // current target angles per servo

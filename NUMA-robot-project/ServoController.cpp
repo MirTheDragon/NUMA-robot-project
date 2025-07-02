@@ -23,13 +23,17 @@ int ServoController::initialize() {
     fd_ = PCA9685_openI2C(i2cBus_, deviceAddress_);
     if (fd_ < 0) {
         fprintf(stderr, "Failed to open I2C bus %d at addr 0x%02X\n", i2cBus_, deviceAddress_);
+        isInitialized_ = false;
         return -1;
     }
     int ret = PCA9685_initPWM(fd_, deviceAddress_, pwmFrequency_);
     if (ret != 0) {
         fprintf(stderr, "Failed to initialize PWM on fd %d addr 0x%02X\n", fd_, deviceAddress_);
+        isInitialized_ = false;
         return ret;
     }
+
+    isInitialized_ = true;
     return 0;
 }
 
@@ -108,4 +112,3 @@ int ServoController::apply() {
 
     return PCA9685_setPWMVals(fd_, deviceAddress_, on, off);
 }
-
