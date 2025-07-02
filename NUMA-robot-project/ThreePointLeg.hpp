@@ -24,10 +24,27 @@ public:
     // Public foot target in body coordinates (set this before calling solveIK)
     Vec3 footTarget = {0.f, 0.f, 0.f};
 
-    // Solved joint angles in radians (updated by solveIK)
-    float hipHorizontalAngleRad = 0.f;
-    float hipVerticalAngleRad = 0.f;
-    float kneeAngleRad = 0.f;
+
+    // Raw IK solved joint angles (radians)
+    float rawHipHorizontalRad = 0.f;
+    float rawHipVerticalRad = 0.f;
+    float rawKneeRad = 0.f;
+
+    // Final servo command angles (radians), after applying mechanical offsets
+    float servoHipHorizontalRad = 0.f;
+    float servoHipVerticalRad = 0.f;
+    float servoKneeRad = 0.f;
+
+    // Servo zero position mechanical offsets (radians)
+    float hipHorizontalServoOffsetRad_ = (0.0f) * PI / 180.0f;      // hip horizontal servo offset: 0° (no offset)
+    float hipVerticalServoOffsetRad_ = (25.0f) * PI / 180.0f;       // hip vertical servo offset: +25°
+    float kneeServoOffsetRad_ = (97.0f) * PI / 180.0f;             // knee servo offset: 97°
+
+    // Servo gear ratios (input angle / output angle)
+    float hipHorizontalGearRatio = 270.f / 120.f;  // 2.25
+    float hipVerticalGearRatio = 1.f;               // 1:1
+    float kneeGearRatio = 270.f / 140.f;             // ~1.93
+
 
     // Solve IK for current footTarget and update joint angles
     void solveIK();
@@ -64,19 +81,14 @@ private:
     float legAngleRad_;          // Leg angle from front (Y axis) in radians
 
     // Physical dimensions (mm)
-    static constexpr float hipRadiusMm_ = 17.49f; // Fixed hip radius
-    static constexpr float hipOffsetXMm_ = 3.55f; // Offset from hip horizontal to vertical joint (joint length)
-    static constexpr float femurLengthMm_ = 15.0f;    // Length of upper leg (femur)
-    static constexpr float tibiaLengthMm_ = 17.0f;    // Length of lower leg (tibia / shin)
-
-    // Servo zero position mechanical offsets (radians)
-    static constexpr float hipVerticalServoOffsetRad_ = (25.f) * PI / 180.0f;    // hip vertical servo offset: +25°
-    static constexpr float kneeServoOffsetRad_ = (-83.f) * PI / 180.0f;          // knee servo offset: -83°
+    static constexpr float hipRadiusMm_ = 17.49f;   // Fixed hip radius
+    static constexpr float hipOffsetXMm_ = 3.55f;   // Offset from hip horizontal to vertical joint (joint length)
+    static constexpr float femurLengthMm_ = 15.0f;  // Length of upper leg (femur)
+    static constexpr float tibiaLengthMm_ = 17.0f;  // Length of lower leg (tibia / shin)
 
     // Physical/mechanical joint limits (radians)
     static constexpr float kneeMinAngleRad_ = 0.0f;
     static constexpr float kneeMaxAngleRad_ = 0.0f;
-    static constexpr float kneeMidAngleOffsetRad_ = (97.0f) * PI / 180.0f ; // Mid angle offset for knee servo
 
     static constexpr float hipVerticalMinAngleRad_ = (-90.0f) * PI / 180.0f;
     static constexpr float hipVerticalMaxAngleRad_ = (90.0f) * PI / 180.0f;

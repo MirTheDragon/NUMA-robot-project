@@ -3,38 +3,32 @@
 #include <array>
 #include "ThreePointLeg.hpp"
 
-using Vec3 = std::array<float, 3>;
+struct Vec3 {
+    float x;
+    float y;
+    float z;
+
+    Vec3() : x(0.f), y(0.f), z(0.f) {}
+    Vec3(float x_, float y_, float z_) : x(x_), y(y_), z(z_) {}
+};
 
 class RobotBody {
 public:
-    struct BodyPose {
-        
-        // New hardcoded collision geometry parameters
-        float originStartingHeight = 0.122f; // origin is 12.2 cm above ground
-        float bodyBottomFromOrigin = -0.116f;   // bottom plate is 11.6cm below origin
-        float bottomPlateRadius = 0.146f;      // 14.6 cm radius bottom plate
-        float legHipPlaneFromOrigin = 0.0674f; // 67.4 mm from origin to hip plane
+            
+    // Hardcoded collision geometry parameters, all in cm now
+    float originStartingHeight = 12.2f;      // 12.2 cm above ground (was 0.122 m)
+    float bodyBottomFromOrigin = -11.6f;     // bottom plate is 11.6 cm below origin (was -0.116 m)
+    float bottomPlateRadius = 14.6f;         // 14.6 cm radius bottom plate (was 0.146 m)
+    float legPlaneFromOrigin = 6.74f;     // 6.74 cm from origin to hip plane (was 0.0674 m)
 
 
-        Vec3 position = {0.f, 0.f, originStartingHeight};
-        float tiltAzimuthDeg = 0.f;
-        float tiltPolarDeg = 0.f;
-        float headingDeg = 0.f;
+    Vec3 position = {0.f, 0.f, originStartingHeight};
+    float tiltAzimuthDeg = 0.f;
+    float tiltPolarDeg = 0.f;
+    float headingDeg = 0.f;
 
-
-        BodyPose() = default;
-        BodyPose(const Vec3& pos, float tiltAz, float tiltPol, float heading)
-            : position(pos), tiltAzimuthDeg(tiltAz), tiltPolarDeg(tiltPol), headingDeg(heading) {}
-
-        Vec3 worldToBodyCoords(const Vec3& worldPos) const;
-    };
-
-    BodyPose pose;
-    std::vector<ThreePointLeg> legs;
+    Vec3 worldToBodyCoords(const Vec3& worldPos) const;
+    Vec3 worldToLegPlaneCoords(const Vec3& footWorld) const;
 
     RobotBody() = default;
-
-    void updateLegs();
-
-    void addLeg(const ThreePointLeg& leg);
 };
