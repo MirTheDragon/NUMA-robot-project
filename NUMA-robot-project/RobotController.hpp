@@ -40,7 +40,7 @@ public:
 
 private:
     static constexpr size_t kJointsPerLeg = 3;
-    static constexpr size_t kNumControllers = 2;
+    static constexpr size_t kNumControllers = 3;
     static constexpr size_t kChannelsPerController = 16;
 
     std::array<ServoController, kNumControllers> servoControllers_; // Array of servo controllers

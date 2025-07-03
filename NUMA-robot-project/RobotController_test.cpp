@@ -4,7 +4,7 @@
 #include "RobotController.hpp"
 
 int main() {
-    RobotController robot(1);  // Initialize robot with 1 leg for testing
+    RobotController robot(0);  // Initialize robot with 0 legs (1 virtual test lieg) for testing
     
     // Set all servo gearings to 1 for direct angle mapping
     //robot.getLeg(0).hipHorizontalGearRatio = 1.0f;

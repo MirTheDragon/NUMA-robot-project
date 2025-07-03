@@ -15,8 +15,9 @@ RobotController::RobotController(int legCount)
         ThreePointLeg(150.f)   // Back Right leg angle
       }
     , servoControllers_{
-        ServoController(1, 0x41, 120),
-        ServoController(1, 0x43, 120)
+        ServoController(1, 0x40, 200),
+        ServoController(1, 0x41, 200),
+        ServoController(1, 0x42, 200)
       }
 {
     initServoMappingsAndConfigs(legCount);
@@ -24,74 +25,87 @@ RobotController::RobotController(int legCount)
 
 void RobotController::initServoMappingsAndConfigs(int legCount) {
     if (legCount > 6) legCount = 6; // max legs
-    if (legCount < 1) legCount = 1; // min legs
+    if (legCount < 0) legCount = 0; // min legs
 
     // For each leg up to legCount, initialize it individually
+    if (legCount == 0) {
+        // --- Leg 0 (Virtual test leg, 0 deg, only initialized by test programs) ---
+        legCount_ = 1; // Ensure at least one leg is initialized for testing
+
+        legs[0] = ThreePointLeg(0.f);
+        servoMappings_[0][0] = {0, 0};  // Hip Horizontal
+        servoMappings_[0][1] = {0, 1};  // Hip Vertical
+        servoMappings_[0][2] = {0, 2};  // Knee
+
+        servoControllers_[0].setServoConfig(0, ServoConfig("Leg0_HipHorizontal", 500, 2500, 270.f, -135.f, 135.f));
+        servoControllers_[0].setServoConfig(1, ServoConfig("Leg0_HipVertical", 500, 2500, 180.f, -90.f, 90.f));
+        servoControllers_[0].setServoConfig(2, ServoConfig("Leg0_Knee", 500, 2500, 270.f, -135.f, 135.f));
+    }
     if (legCount > 0) {
         // --- Leg 0 (Right Middle, 0 deg) ---
         legs[0] = ThreePointLeg(0.f);
         servoMappings_[0][0] = {1, 0};  // Hip Horizontal
-        servoMappings_[0][1] = {1, 1};  // Hip Vertical
-        servoMappings_[0][2] = {1, 2};  // Knee
+        servoMappings_[0][1] = {2, 0};  // Hip Vertical
+        servoMappings_[0][2] = {1, 1};  // Knee
 
         servoControllers_[1].setServoConfig(0, ServoConfig("Leg0_HipHorizontal", 500, 2500, 270.f, -135.f, 135.f));
-        servoControllers_[1].setServoConfig(1, ServoConfig("Leg0_HipVertical", 500, 2500, 180.f, -90.f, 90.f));
-        servoControllers_[1].setServoConfig(2, ServoConfig("Leg0_Knee", 500, 2500, 270.f, -135.f, 135.f));
+        servoControllers_[2].setServoConfig(0, ServoConfig("Leg0_HipVertical", 500, 2500, 180.f, -90.f, 90.f));
+        servoControllers_[1].setServoConfig(1, ServoConfig("Leg0_Knee", 500, 2500, 270.f, -135.f, 135.f));
     }
     if (legCount > 1) {
         // --- Leg 1 (Right Front, 60 deg) ---
         legs[1] = ThreePointLeg(60.f);
-        servoMappings_[1][0] = {0, 3};
-        servoMappings_[1][1] = {0, 4};
-        servoMappings_[1][2] = {0, 5};
+        servoMappings_[1][0] = {1, 2};
+        servoMappings_[1][1] = {2, 1};
+        servoMappings_[1][2] = {1, 3};
 
-        servoControllers_[0].setServoConfig(3, ServoConfig("Leg1_HipHorizontal", 500, 2500, 270.f, -90.f, 90.f));
-        servoControllers_[0].setServoConfig(4, ServoConfig("Leg1_HipVertical", 500, 2500, 180.f, -90.f, 90.f));
-        servoControllers_[0].setServoConfig(5, ServoConfig("Leg1_Knee", 500, 2500, 140.f, 0.f, 140.f));
+        servoControllers_[1].setServoConfig(2, ServoConfig("Leg1_HipHorizontal", 500, 2500, 270.f, -90.f, 90.f));
+        servoControllers_[2].setServoConfig(1, ServoConfig("Leg1_HipVertical", 500, 2500, 180.f, -90.f, 90.f));
+        servoControllers_[1].setServoConfig(3, ServoConfig("Leg1_Knee", 500, 2500, 140.f, 0.f, 140.f));
     }
     if (legCount > 2) {
         // --- Leg 2 (Left Front, 120 deg) ---
         legs[2] = ThreePointLeg(120.f);
-        servoMappings_[2][0] = {0, 6};
-        servoMappings_[2][1] = {0, 7};
-        servoMappings_[2][2] = {0, 8};
+        servoMappings_[2][0] = {1, 4};
+        servoMappings_[2][1] = {2, 2};
+        servoMappings_[2][2] = {1, 5};
 
-        servoControllers_[0].setServoConfig(6, ServoConfig("Leg2_HipHorizontal", 500, 2500, 270.f, -90.f, 90.f));
-        servoControllers_[0].setServoConfig(7, ServoConfig("Leg2_HipVertical", 500, 2500, 180.f, -90.f, 90.f));
-        servoControllers_[0].setServoConfig(8, ServoConfig("Leg2_Knee", 500, 2500, 140.f, 0.f, 140.f));
+        servoControllers_[1].setServoConfig(4, ServoConfig("Leg2_HipHorizontal", 500, 2500, 270.f, -90.f, 90.f));
+        servoControllers_[2].setServoConfig(2, ServoConfig("Leg2_HipVertical", 500, 2500, 180.f, -90.f, 90.f));
+        servoControllers_[1].setServoConfig(5, ServoConfig("Leg2_Knee", 500, 2500, 140.f, 0.f, 140.f));
     }
     if (legCount > 3) {
         // --- Leg 3 (Left Middle, 180 deg) ---
         legs[3] = ThreePointLeg(180.f);
-        servoMappings_[3][0] = {0, 9};
-        servoMappings_[3][1] = {0, 10};
-        servoMappings_[3][2] = {0, 11};
+        servoMappings_[3][0] = {1, 6};
+        servoMappings_[3][1] = {2, 3};
+        servoMappings_[3][2] = {1, 7};
 
-        servoControllers_[0].setServoConfig(9, ServoConfig("Leg3_HipHorizontal", 500, 2500, 270.f, -90.f, 90.f));
-        servoControllers_[0].setServoConfig(10, ServoConfig("Leg3_HipVertical", 500, 2500, 180.f, -90.f, 90.f));
-        servoControllers_[0].setServoConfig(11, ServoConfig("Leg3_Knee", 500, 2500, 140.f, 0.f, 140.f));
+        servoControllers_[1].setServoConfig(6, ServoConfig("Leg3_HipHorizontal", 500, 2500, 270.f, -90.f, 90.f));
+        servoControllers_[2].setServoConfig(3, ServoConfig("Leg3_HipVertical", 500, 2500, 180.f, -90.f, 90.f));
+        servoControllers_[1].setServoConfig(7, ServoConfig("Leg3_Knee", 500, 2500, 140.f, 0.f, 140.f));
     }
     if (legCount > 4) {
         // --- Leg 4 (Left Back, 240 deg) ---
         legs[4] = ThreePointLeg(240.f);
-        servoMappings_[4][0] = {0, 12};
-        servoMappings_[4][1] = {0, 13};
-        servoMappings_[4][2] = {0, 14};
+        servoMappings_[4][0] = {1, 8};
+        servoMappings_[4][1] = {2, 4};
+        servoMappings_[4][2] = {1, 9};
 
-        servoControllers_[0].setServoConfig(12, ServoConfig("Leg4_HipHorizontal", 500, 2500, 270.f, -90.f, 90.f));
-        servoControllers_[0].setServoConfig(13, ServoConfig("Leg4_HipVertical", 500, 2500, 180.f, -90.f, 90.f));
-        servoControllers_[0].setServoConfig(14, ServoConfig("Leg4_Knee", 500, 2500, 140.f, 0.f, 140.f));
+        servoControllers_[1].setServoConfig(8, ServoConfig("Leg4_HipHorizontal", 500, 2500, 270.f, -90.f, 90.f));
+        servoControllers_[2].setServoConfig(4, ServoConfig("Leg4_HipVertical", 500, 2500, 180.f, -90.f, 90.f));
+        servoControllers_[1].setServoConfig(9, ServoConfig("Leg4_Knee", 500, 2500, 140.f, 0.f, 140.f));
     }
     if (legCount > 5) {
         // --- Leg 5 (Right Back, 300 deg) ---
         legs[5] = ThreePointLeg(300.f);
-        servoMappings_[5][0] = {1, 0};
-        servoMappings_[5][1] = {1, 1};
-        servoMappings_[5][2] = {1, 2};
+        servoMappings_[5][0] = {1, 10};
+        servoMappings_[5][1] = {2, 5};
+        servoMappings_[5][2] = {1, 11};
 
-        servoControllers_[1].setServoConfig(0, ServoConfig("Leg5_HipHorizontal", 500, 2500, 270.f, -90.f, 90.f));
-        servoControllers_[1].setServoConfig(1, ServoConfig("Leg5_HipVertical", 500, 2500, 180.f, -90.f, 90.f));
-        servoControllers_[1].setServoConfig(2, ServoConfig("Leg5_Knee", 500, 2500, 140.f, 0.f, 140.f));
+        servoControllers_[1].setServoConfig(10, ServoConfig("Leg5_HipHorizontal", 500, 2500, 270.f, -90.f, 90.f));
+        servoControllers_[2].setServoConfig(5, ServoConfig("Leg5_HipVertical", 500, 2500, 180.f, -90.f, 90.f));
+        servoControllers_[1].setServoConfig(11, ServoConfig("Leg5_Knee", 500, 2500, 140.f, 0.f, 140.f));
     }
 }
 
