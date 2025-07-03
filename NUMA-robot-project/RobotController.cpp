@@ -15,8 +15,8 @@ RobotController::RobotController(int legCount)
         ThreePointLeg(150.f)   // Back Right leg angle
       }
     , servoControllers_{
-        ServoController(1, 0x41, 200),
-        ServoController(1, 0x43, 200)
+        ServoController(1, 0x41, 120),
+        ServoController(1, 0x43, 120)
       }
 {
     initServoMappingsAndConfigs(legCount);
@@ -99,13 +99,10 @@ void RobotController::initServoMappingsAndConfigs(int legCount) {
 void RobotController::updateAllIK() {
     for (size_t i = 0; i < legCount_; ++i) {
         // Convert stored foot target in world coordinates to body coordinates
-        Vec3 footInBody = Body.worldToBodyCoords(footTargetsWorld_[i]); // you need footTargetsWorld_ to hold world targets
-        
-        // Convert from body coordinates to leg coordinates
-        Vec3 footInLeg = legs[i].bodyToLegCoords(footInBody);
+        Vec3 footInBody = Body.worldToLegPlaneCoords(footTargetsWorld_[i]); // you need footTargetsWorld_ to hold world targets
         
         // Set the leg's foot target to leg coordinates for IK
-        legs[i].footTarget = footInLeg;
+        legs[i].footTarget = footInBody;
         
         // Solve IK for the leg with this foot target
         legs[i].solveIK();

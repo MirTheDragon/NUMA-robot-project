@@ -66,7 +66,7 @@ Vec3 RobotBody::worldToLegPlaneCoords(const Vec3& footWorld) const {
     Vec3 bodyCoords = worldToBodyCoords(footWorld);
 
     // Subtract the leg hip plane offset on the z axis (vertical)
-    bodyCoords.z += legPlaneFromOrigin;  // legHipPlaneFromOrigin is in cm
+    bodyCoords.z -= legPlaneFromOrigin;  // legHipPlaneFromOrigin is in cm
 
     return bodyCoords;
 }

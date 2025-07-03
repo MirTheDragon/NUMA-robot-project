@@ -11,7 +11,7 @@ public:
     float originStartingHeight = 12.2f;      // 12.2 cm above ground (was 0.122 m)
     float bodyBottomFromOrigin = -11.6f;     // bottom plate is 11.6 cm below origin (was -0.116 m)
     float bottomPlateRadius = 14.6f;         // 14.6 cm radius bottom plate (was 0.146 m)
-    float legPlaneFromOrigin = 6.74f;     // 6.74 cm from origin to hip plane (was 0.0674 m)
+    float legPlaneFromOrigin = -6.74f;     // 6.74 cm from origin to hip plane (was 0.0674 m)
 
 
     Vec3 position = {0.f, 0.f, originStartingHeight};

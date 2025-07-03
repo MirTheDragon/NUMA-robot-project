@@ -19,10 +19,11 @@ public:
     explicit ThreePointLeg(float legAngleDeg);
 
     // Converts foot position from body coords to leg coords for IK
-    Vec3 bodyToLegCoords(const Vec3& footBodyPos) const;
+    Vec3 bodyToLegCoords();
 
     // Public foot target in body coordinates (set this before calling solveIK)
     Vec3 footTarget = {0.f, 0.f, 0.f};
+    Vec3 footInLegTarget = {0.f, 0.f, 0.f}; // Foot target in leg coordinates (after IK)
 
 
     // Raw IK solved joint angles (radians)
@@ -80,11 +81,11 @@ public:
 private:
     float legAngleRad_;          // Leg angle from front (Y axis) in radians
 
-    // Physical dimensions (mm)
-    static constexpr float hipRadiusMm_ = 17.49f;   // Fixed hip radius
-    static constexpr float hipOffsetXMm_ = 3.55f;   // Offset from hip horizontal to vertical joint (joint length)
-    static constexpr float femurLengthMm_ = 15.0f;  // Length of upper leg (femur)
-    static constexpr float tibiaLengthMm_ = 17.0f;  // Length of lower leg (tibia / shin)
+    // Physical dimensions (cm)
+    static constexpr float hipRadius_ = 17.49f;   // Fixed hip radius
+    static constexpr float hipOffsetX_ = 3.55f;   // Offset from hip horizontal to vertical joint (joint length)
+    static constexpr float femurLength_ = 15.0f;  // Length of upper leg (femur)
+    static constexpr float tibiaLength_ = 17.0f;  // Length of lower leg (tibia / shin)
 
     // Physical/mechanical joint limits (radians)
     static constexpr float kneeMinAngleRad_ = 0.0f;
