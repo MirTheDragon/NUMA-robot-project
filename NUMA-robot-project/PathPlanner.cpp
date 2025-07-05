@@ -286,42 +286,83 @@ void PathPlanner::updateFootStateTransitionsByGroup(WalkCycle* newWalkCycle = nu
     }
 
     bool liftNextGroup = false;
+    bool liftDueToEdge = false;
+    bool liftDueToSyncedStep = false;
 
     // Compute distance to back edge for each group using currentWalkCycle_
     computeDistanceToBackEdgePerGroup(*currentWalkCycle_);
     selectNextGroupToLift();
 
+    // Spatial-based early lift: check if group is close enough to back edge, this is the snadard lift condition when legs are spaced as intended
     float earlyLiftRadius = stepAreaRadius_ * (1.f - currentWalkCycle_->earlyLiftFraction_);
-    
+    if (currentWalkCycle_->distToEdgePerGroup[currentWalkCycle_->optimalLiftedGroupIndex_] < earlyLiftRadius) {
+        liftDueToEdge = true;
+        liftNextGroup = true;
+    }
 
     // Condition based on synchronized step area vector length
-    Vec2 syncStepVec = getSynchronizedStepAreaVector(*currentWalkCycle_);
-    if (syncStepVec.length() < stepAreaRadius_) {
-        liftNextGroup = true;
+    if(!liftNextGroup) {
+
+        Vec2 syncStepVec = getSynchronizedStepAreaVector(*currentWalkCycle_);
+
+        if (syncStepVec.length() < stepAreaRadius_) {
+            liftDueToSyncedStep = true;
+            liftNextGroup = true;
+
+        } else {
+
+            float liftedSpeedMultiplier = currentWalkCycle_->liftedSpeedMultiplier_;
+            if (liftedSpeedMultiplier < 0.001f) liftedSpeedMultiplier = 0.001f;
+            // Compute maximum distance to target in the group with minimum distance to back edge
+            float maxDistToTarget = computeMaxDistanceToTargetInGroup(currentWalkCycle_->optimalLiftedGroupIndex_);
+            float syncStepDistanceAhead = syncStepVec.length() - stepAreaRadius_;
+            float legCatchupTime = maxDistToTarget / liftedSpeedMultiplier;
+
+            // Timing-based early lift
+            if (legCatchupTime < syncStepDistanceAhead) {
+                liftDueToSyncedStep = true;
+                liftNextGroup = true;
+            }
+        }
     }
 
-    float liftedSpeedMultiplier = currentWalkCycle_->liftedSpeedMultiplier_;
-    if (liftedSpeedMultiplier < 0.001f) liftedSpeedMultiplier = 0.001f;
-    // Compute maximum distance to target in the group with minimum distance to back edge
-    float maxDistToTarget = computeMaxDistanceToTargetInGroup(currentWalkCycle_->optimalLiftedGroupIndex_);
-    float syncStepDistanceAhead = syncStepVec.length() - stepAreaRadius_;
-    float legCatchupTime = maxDistToTarget / liftedSpeedMultiplier;
+    // Premptive lift if next group spacing is too small
+    // Early lift decision flag
+    bool liftDueToSpacing = false;
 
-    
-    // Timing-based early lift
-    if (legCatchupTime < syncStepDistanceAhead) {
-        liftNextGroup = true;
+    // Decide how many groups to check, e.g., half the available groups
+    const size_t groupsToCheck = (currentWalkCycle_->distToEdgePerGroup.size() + 1) / 2;  // half
+
+    if(groupsToCheck > 1 && !liftNextGroup) {
+
+        // Get groups sorted by distToEdge ascending
+        std::vector<std::pair<size_t, float>> groupDistances;
+        for (size_t i = 0; i < currentWalkCycle_->distToEdgePerGroup.size(); ++i) {
+            groupDistances.emplace_back(i, currentWalkCycle_->distToEdgePerGroup[i]);
+        }
+        std::sort(groupDistances.begin(), groupDistances.end(), 
+            [](const auto& a, const auto& b) { return a.second < b.second; });
+
+        // Target fractional spacing in cm or same units as distToEdge
+        float targetSpacing = stepAreaRadius_ * 2 * currentWalkCycle_->fractionAhead_;
+        float minAllowedSpacing = targetSpacing * (1 - currentWalkCycle_->earlyLiftFraction_); // 80% of ideal spacing when earlyLiftFraction_ = 0.20
+
+        // Iterate pairs of consecutive groups in distance order
+        for (size_t i = 1; i < groupsToCheck; ++i) {
+            // If spacing less than minimum allowed spacing, trigger early lift
+            float expectedMinSpacing = minAllowedSpacing * (i);  // Scale spacing by position
+            if (groupDistances[i].second < expectedMinSpacing) {
+                liftDueToSpacing = true;
+                liftNextGroup = true;
+                break;  // stop checking once condition is met
+            }
+        }
     }
-
-    // Spatial-based early lift: check if group is close enough to back edge
-    if (currentWalkCycle_->distToEdgePerGroup[currentWalkCycle_->optimalLiftedGroupIndex_] < earlyLiftRadius) {
-        liftNextGroup = true;
-    }
-
 
     if (liftNextGroup) {
-        currentWalkCycle_->lastLiftedGroupIndex_ = currentWalkCycle_->minDistToBackGroupIndex_;
-        const auto& group = currentWalkCycle_->getCurrentGroupLegs();
+        size_t liftGroupIndex = currentWalkCycle_->optimalLiftedGroupIndex_;  // or minDistToBackGroupIndex_
+        currentWalkCycle_->lastLiftedGroupIndex_ = liftGroupIndex;
+        const auto& group = currentWalkCycle_->getLegGroups()[liftGroupIndex];
         for (size_t legIndex : group) {
             FootStatusInternal& foot = footStatuses_[legIndex];
             foot.state = FootState::Lifted;

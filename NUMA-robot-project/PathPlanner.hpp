@@ -146,7 +146,7 @@ private:
 
 class WalkCycle {
 public:
-    WalkCycle(std::vector<std::vector<size_t>> groups, float liftedSpeedMultiplier,  float fractionAhead = 0.5f, float earlyLiftFraction = 0.00f)
+    WalkCycle(std::vector<std::vector<size_t>> groups, float liftedSpeedMultiplier,  float fractionAhead = 0.5f, float earlyLiftFraction = 0.20f)
         : legGroups_(std::move(groups)),
           liftedSpeedMultiplier_(liftedSpeedMultiplier),
           fractionAhead_(fractionAhead),
