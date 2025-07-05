@@ -18,6 +18,9 @@ public:
     static constexpr size_t kNumLegs = 6;
     size_t legCount_ = 6; // Number of legs, default to 6
     RobotController(int legCount);
+    
+    // Store current desired foot positions in world coordinates
+    std::array<Vec3, kNumLegs> footTargetsWorld_;
 
     int initialize();
     void updateAllIK();
@@ -46,9 +49,6 @@ private:
     std::array<ServoController, kNumControllers> servoControllers_; // Array of servo controllers
     std::array<std::array<ServoMapping, kJointsPerLeg>, kNumLegs> servoMappings_; // Mappings from legs to servo controllers and channels
 
-    
-    // New: store current desired foot positions in world coordinates
-    std::array<Vec3, kNumLegs> footTargetsWorld_;
 
     // New: store last pushed foot positions (for direction/speed calculation)
     std::array<Vec3, kNumLegs> footTargetsLastPushedWorld_;

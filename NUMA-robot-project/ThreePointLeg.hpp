@@ -17,6 +17,7 @@ class ThreePointLeg {
 public:
     // Constructor takes leg angle in degrees but converts to radians internally
     explicit ThreePointLeg(float legAngleDeg);
+    float legAngleRad_;          // Leg angle from front (Y axis) in radians
 
     // Converts foot position from body coords to leg coords for IK
     Vec3 bodyToLegCoords();
@@ -79,7 +80,6 @@ public:
     }
 
 private:
-    float legAngleRad_;          // Leg angle from front (Y axis) in radians
 
     // Physical dimensions (cm)
     static constexpr float hipRadius_ = 17.49f;   // Fixed hip radius
