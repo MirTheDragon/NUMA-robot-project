@@ -220,9 +220,6 @@ int RobotController::initialize() {
     return 0;
 }
 
-
-
-
 // Set foot target for a specific leg
 void RobotController::setFootTarget(size_t legIndex, const Vec3& target) {
     if (legIndex < legCount_) {

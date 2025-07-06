@@ -61,7 +61,7 @@ public:
     }
 
     // Rotate vector v around Z by angle radians (note: angle in radians)
-    inline static void rotateZ(Vec3& v, float angleRad) {
+    inline void rotateZ(Vec3& v, float angleRad) {
         float cosA = std::cos(angleRad);
         float sinA = std::sin(angleRad);
         float xNew = v.x * cosA - v.y * sinA;
@@ -71,7 +71,7 @@ public:
     }
 
     // Rotate vector v around Y by angle radians (note: angle in radians)
-    inline static void rotateY(Vec3& v, float angleRad) {
+    inline void rotateY(Vec3& v, float angleRad) {
         float c = std::cos(angleRad);
         float s = std::sin(angleRad);
         float x = v.x, z = v.z;

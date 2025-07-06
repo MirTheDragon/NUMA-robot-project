@@ -7,7 +7,7 @@ constexpr float deg2rad(float deg) {
     return deg * 3.14159265358979323846f / 180.f;
 }
 
-void rotateX(float angleDeg, Vec3& v) {
+inline void rotateX(float angleDeg, Vec3& v) {
     float rad = deg2rad(angleDeg);
     float c = std::cos(rad);
     float s = std::sin(rad);
@@ -17,7 +17,7 @@ void rotateX(float angleDeg, Vec3& v) {
     v.z = s * y + c * z;
 }
 
-void rotateY(float angleDeg, Vec3& v) {
+inline void rotateY(float angleDeg, Vec3& v) {
     float rad = deg2rad(angleDeg);
     float c = std::cos(rad);
     float s = std::sin(rad);
@@ -27,7 +27,7 @@ void rotateY(float angleDeg, Vec3& v) {
     v.z = -s * x + c * z;
 }
 
-void rotateZ(float angleDeg, Vec3& v) {
+inline void rotateZ(float angleDeg, Vec3& v) {
     float rad = deg2rad(angleDeg);
     float c = std::cos(rad);
     float s = std::sin(rad);

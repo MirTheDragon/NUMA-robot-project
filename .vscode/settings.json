@@ -58,6 +58,8 @@
         "csignal": "cpp",
         "cstring": "cpp",
         "fstream": "cpp",
-        "optional": "cpp"
+        "optional": "cpp",
+        "condition_variable": "cpp",
+        "mutex": "cpp"
     }
 }

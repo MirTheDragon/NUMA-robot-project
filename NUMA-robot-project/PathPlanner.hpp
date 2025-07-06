@@ -39,7 +39,7 @@ struct Vec2 {
 };
 
 // Rotates a Vec2 vector by angleDegrees CCW around origin (0,0)
-Vec2 rotateZ(const Vec2& vec, float angleDegrees) {
+inline Vec2 rotateZ(const Vec2& vec, float angleDegrees) {
     const float rad = angleDegrees * 3.14159265358979323846f / 180.f;
     float cosA = std::cos(rad);
     float sinA = std::sin(rad);
@@ -56,7 +56,21 @@ enum class FootState {
     Lifted
 };
 
+class WalkCycle;  // Forward declaration before PathPlanner class definition
+
+
 class PathPlanner {
+    struct FootStatusInternal {
+        FootState state = FootState::Grounded;
+        Vec3 currentPosition;   // Current position in 3D (world coords)
+        Vec3 desiredTarget;   // Desired target in 3D (world coords)
+        Vec2 stepAreaCenter;     // Center of allowed step area circle
+        Vec2 stepAreaVector;   // Vector from step area center to foot target
+        Vec2 stepAreaTarget;     // Target position in 2D (XY plane)
+        Vec2 stepAreaSyncronizedTarget;     // Target position in 2D (XY plane)
+        float stepProgress = 0.f;   // Progress along step path [0..1]
+    };
+
 public:
     static constexpr size_t kNumLegs = 6;  // fixed leg count
     
@@ -68,16 +82,25 @@ public:
     // Max robot speed in cm/s (grounded feet move this fast)
     float maxRobotSpeedCmPerSec = 10.0f;
     float RobotSpeedCmPerSec = 0.0f; // Current speed based on joystick input
-    float maxLiftedLegSpeedPerSec = maxRobotSpeedCmPerSec;
 
-    float stepHeight = 3.0f; // Default step height in cm, adjustable on the fly
+    float stepHeight = 4.0f; // Default step height in cm, adjustable on the fly
     bool clampFootTargets = true;  // Toggle clamping on/off
 
     // Update planner state with joystick input and elapsed time (seconds)
     void update(const Vec2& joystickInput, float deltaTimeSeconds);
+    void requestWalkCycleSwitch(WalkCycle* newCycle) {
+        nextWalkCycle_ = newCycle;
+    }
 
     WalkCycle* currentWalkCycle_ = nullptr;  // Pointer to active walk cycle pattern
+    WalkCycle* nextWalkCycle_ = nullptr;  // Pointer to active walk cycle pattern
 
+
+    
+    // Getter for foot status by leg index
+    const FootStatusInternal& getFootStatus(size_t legIndex) const {
+        return footStatuses_[legIndex];
+    }
 
 private:
     RobotController& robot_; // Robot controller must have 6 legs
@@ -87,18 +110,8 @@ private:
     float stepSpeed_ = 5.f;      // cm/s speed foot moves on ground plane
     float stepDuration_ = 0.5f;  // seconds for full step cycle (lift + lower)
 
-    struct FootStatusInternal {
-        FootState state = FootState::Grounded;
-        Vec3 currentPosition;   // Current position in 3D (world coords)
-        Vec3 desiredTarget;   // Desired target in 3D (world coords)
-        Vec2 stepAreaCenter;     // Center of allowed step area circle
-        Vec2 stepAreaVector;   // Vector from step area center to foot target
-        Vec2 stepAreaTarget;     // Target position in 2D (XY plane)
-        Vec2 stepAreaSpacedTarget;     // Target position in 2D (XY plane)
-        float stepProgress = 0.f;   // Progress along step path [0..1]
-    };
-
     std::array<FootStatusInternal, kNumLegs> footStatuses_;
+
 
     // Setter to change walk cycle at runtime
     void setCurrentWalkCycle(WalkCycle* walkCycle) {
@@ -114,22 +127,17 @@ private:
     // Calculate step area centers for each leg based on leg angle and robot heading
     void updateStepAreaCenter(size_t legIndex, float headingRad);
 
-    void updateStepAreaTargets(const Vec2& joystickInput, float headingRad);
-
     // Update desired foot targets constrained within step area, driven by joystick input
+    void updateStepAreaTargets(const Vec2& joystickInput, float headingRad);
     void updateFootTargets(const Vec2& joystickInput, float dt);
-    void updateFootStateTransitionsByGroup(WalkCycle* newWalkCycle = nullptr);
 
     // Update foot states and compute stepProgress and foot height smoothly:
-    // foot height peaks at mid-stepProgress (0.5),
-    // foot is lowered when stepProgress < 0.2 or > 0.8 (start/end 20% of cycle)
-    void stepLogic(float dt);
+    void updateFootStateTransitionsByGroup();
+    void stepPathLogic(const Vec2& joystickInput, float dt);
 
-    // Convert 3D foot target into robot controller foot targets (Vec3)
-    void pushTargetsToRobot();
 
     // Helper to compute vertical offset (height) based on stepProgress
-    float computeFootHeight(const FootStatusInternal& footState, float progress) const;
+    void computeFootHeights();
 
     // These functions operate on a WalkCycle instance
     void computeTimeToEdgePerGroup(WalkCycle& walkCycle, const Vec2& moveDir);
@@ -138,8 +146,13 @@ private:
     float computeMaxDistanceToTargetInGroup(size_t groupIndex) const;
     float computeMaxForwardDistanceToStepAreaTarget() const;
     Vec2 getSynchronizedStepAreaVector(const WalkCycle& walkCycle) const;
+    void updateSynchronizedStepAreaTargets();
     void selectNextGroupToLift(WalkCycle& walkCycle);
     void adjustSpeedToLegCapabilities(WalkCycle& walkCycle, const Vec2& moveDir);
+
+    
+    // Convert 3D foot target into robot controller foot targets (Vec3)
+    void pushTargetsToRobot();
     
 };
 
@@ -156,9 +169,12 @@ public:
         distToEdgePerGroup.resize(legGroups_.size(), 0.f);
     }
 
+    // Array of leg groups, each group contains indices of legs
+    std::vector<std::vector<size_t>> legGroups_;
+    float liftedSpeedMultiplier_;
     float maxRobotSpeedCmPerSec = 10.f;  // max desired speed of grounded legs
-    float earlyLiftFraction_;
     float fractionAhead_;  // fraction of step area radius for spacing
+    float earlyLiftFraction_; // fraction of step duration to lift early
     float positionThreshold_ = 0.2f;  // threshold distance to switch foot states (cm)
 
     int walkDirection_ = 1;  // +1 or -1 to cycle through legGroups_
@@ -173,9 +189,11 @@ public:
         return legGroups_[lastLiftedGroupIndex_];
     }
 
+    const float getMinDistToBackEdge() const {
+        return distToEdgePerGroup[minDistToBackGroupIndex_];
+    }
+
     // Get time to edge for current group
-    std::vector<std::vector<size_t>> legGroups_;
-    float liftedSpeedMultiplier_;
     size_t lastLiftedGroupIndex_ = 0; // index of last lifted group
     size_t optimalLiftedGroupIndex_ = 0; // index of group to lift next
     std::vector<float> timeToEdgePerGroup;
