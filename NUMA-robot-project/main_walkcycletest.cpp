@@ -74,7 +74,10 @@ void ikThread(RobotController& robot) {
         auto pathStart = std::chrono::steady_clock::now();
 
         pathPlanner->update(joystickCopy, ikLoopInterval.count() / 1000.0f);
+        // pathPlanner->printDebugStatus(); // Debug print for foot status
+
         robot.updateKinematicsAndApply();
+
 
         auto pathEnd = std::chrono::steady_clock::now();
         uint64_t durationUs = std::chrono::duration_cast<std::chrono::microseconds>(pathEnd - pathStart).count();
@@ -105,9 +108,9 @@ int main() {
 
     if (!initGraphics()) return 1;
 
-    static WalkCycle walkCycle3Set({ {0, 2, 4}, {1, 3, 5} }, 1.f, 1.0f, 0.05f);
-    static WalkCycle walkCycle2Set({ {0, 3}, {1, 4}, {2, 5} }, 3.f, 0.5f, 0.05f);
-    static WalkCycle walkCycle1Set({ {0}, {1}, {2}, {3}, {4}, {5} }, 6.f, 0.2f, 0.05f);
+    static WalkCycle walkCycle3Set({ {0, 2, 4}, {1, 3, 5} }, 1.f, 1.0f);
+    static WalkCycle walkCycle2Set({ {0, 3}, {1, 4}, {2, 5} }, 3.f, 0.5f);
+    static WalkCycle walkCycle1Set({ {0}, {1}, {2}, {3}, {4}, {5} }, 6.f, 0.2f);
 
     walkCycles = { &walkCycle3Set, &walkCycle2Set, &walkCycle1Set };
 
@@ -157,7 +160,7 @@ int main() {
         auto drawEnd = std::chrono::steady_clock::now();
         auto drawDurationUs = std::chrono::duration_cast<std::chrono::microseconds>(drawEnd - drawStart).count();
 
-        std::cout << "Drawing time (us): " << drawDurationUs << std::endl;
+        //std::cout << "Drawing time (us): " << drawDurationUs << std::endl;
 
         auto loopEnd = std::chrono::steady_clock::now();
         uint64_t loopDurationUs = std::chrono::duration_cast<std::chrono::microseconds>(loopEnd - loopStart).count();
@@ -170,9 +173,9 @@ int main() {
         {
             std::lock_guard<std::mutex> lock(mainTimingMutex);
             std::lock_guard<std::mutex> lock2(ikTimingMutex);
-            std::cout << "Timing (us): PathPlanner=" << pathPlannerDurationUs
-                      << " IK=" << ikDurationUs
-                      << " MainLoop=" << mainLoopDurationUs << std::endl;
+            //std::cout << "Timing (us): PathPlanner=" << pathPlannerDurationUs
+            //          << " IK=" << ikDurationUs
+            //          << " MainLoop=" << mainLoopDurationUs << std::endl;
         }
 
         std::this_thread::sleep_until(loopStart + mainLoopInterval);

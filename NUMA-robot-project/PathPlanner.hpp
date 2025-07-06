@@ -76,14 +76,14 @@ public:
     
     // Pass robot controller reference in constructor
     PathPlanner(RobotController& robot);
-    float stepAreaPlacementDistance = 34.f; // cm step center from robot body center
+    float stepAreaPlacementDistance = 28.f; // cm step center from robot body center
     
 
     // Max robot speed in cm/s (grounded feet move this fast)
-    float maxRobotSpeedCmPerSec = 10.0f;
+    float maxRobotSpeedCmPerSec = 20.0f;
     float RobotSpeedCmPerSec = 0.0f; // Current speed based on joystick input
 
-    float stepHeight = 4.0f; // Default step height in cm, adjustable on the fly
+    float stepHeight = 10.0f; // Default step height in cm, adjustable on the fly
     bool clampFootTargets = true;  // Toggle clamping on/off
 
     // Update planner state with joystick input and elapsed time (seconds)
@@ -101,6 +101,8 @@ public:
     const FootStatusInternal& getFootStatus(size_t legIndex) const {
         return footStatuses_[legIndex];
     }
+
+    void printDebugStatus() const;
 
 private:
     RobotController& robot_; // Robot controller must have 6 legs
@@ -137,14 +139,14 @@ private:
 
 
     // Helper to compute vertical offset (height) based on stepProgress
-    void computeFootHeights();
+    void computeFootHeights(float deltaTimeSeconds, const Vec2& joystickInput);
 
     // These functions operate on a WalkCycle instance
     void computeTimeToEdgePerGroup(WalkCycle& walkCycle, const Vec2& moveDir);
     void computeDistanceToBackEdgePerGroup(WalkCycle& walkCycle);
     void selectNextGroupToLift();
     float computeMaxDistanceToTargetInGroup(size_t groupIndex) const;
-    float computeMaxForwardDistanceToStepAreaTarget() const;
+    float computeMaxDistanceAlongStep() const;
     Vec2 getSynchronizedStepAreaVector(const WalkCycle& walkCycle) const;
     void updateSynchronizedStepAreaTargets();
     void selectNextGroupToLift(WalkCycle& walkCycle);
@@ -159,13 +161,11 @@ private:
 
 class WalkCycle {
 public:
-    WalkCycle(std::vector<std::vector<size_t>> groups, float liftedSpeedMultiplier,  float fractionAhead = 0.5f, float earlyLiftFraction = 0.20f)
+    WalkCycle(std::vector<std::vector<size_t>> groups, float liftedSpeedMultiplier,  float fractionAhead = 0.5f)
         : legGroups_(std::move(groups)),
           liftedSpeedMultiplier_(liftedSpeedMultiplier),
-          fractionAhead_(fractionAhead),
-          earlyLiftFraction_(earlyLiftFraction)
+          fractionAhead_(fractionAhead)
     {
-        timeToEdgePerGroup.resize(legGroups_.size(), 0.f);
         distToEdgePerGroup.resize(legGroups_.size(), 0.f);
     }
 
@@ -174,8 +174,8 @@ public:
     float liftedSpeedMultiplier_;
     float maxRobotSpeedCmPerSec = 10.f;  // max desired speed of grounded legs
     float fractionAhead_;  // fraction of step area radius for spacing
-    float earlyLiftFraction_; // fraction of step duration to lift early
-    float positionThreshold_ = 0.2f;  // threshold distance to switch foot states (cm)
+    float earlyLiftFraction_ = 0.3f; // fraction of step duration to lift early
+    float positionThreshold_ = 1.0f;  // threshold distance to switch foot states (cm)
 
     int walkDirection_ = 1;  // +1 or -1 to cycle through legGroups_
     size_t minDistToBackGroupIndex_ = 0;  // index of group with minimum distance to edge

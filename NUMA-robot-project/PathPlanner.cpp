@@ -13,9 +13,9 @@ PathPlanner::PathPlanner(RobotController& robot)
     }
 
     // Initialize your walk cycles somewhere (or inject them)
-    static WalkCycle walkCycle3Set({ {0, 2, 4}, {1, 3, 5} }, 1.f, 1.0f, 0.05f);
-    static WalkCycle walkCycle2Set({ {0, 3}, {1, 4}, {2, 5} }, 3.f, 0.5f, 0.05f);
-    static WalkCycle walkCycle1Set({ {0}, {1}, {2}, {3}, {4}, {5} }, 6.f, 0.2f, 0.05f);
+    static WalkCycle walkCycle3Set({ {0, 2, 4}, {1, 3, 5} }, 1.f, 1.0f);
+    static WalkCycle walkCycle2Set({ {0, 3}, {1, 4}, {2, 5} }, 3.f, 0.5f);
+    static WalkCycle walkCycle1Set({ {0}, {1}, {2}, {3}, {4}, {5} }, 6.f, 0.2f);
 
     // Set a default walk cycle
     currentWalkCycle_ = &walkCycle3Set;
@@ -90,21 +90,44 @@ void PathPlanner::updateStepAreaTargets(const Vec2& joystickInput, float heading
     }
 }
 
-void PathPlanner::computeFootHeights() {
+void PathPlanner::computeFootHeights(float deltaTimeSeconds, const Vec2& joystickInput) {
+    const float maxHeightChangeSpeed = maxRobotSpeedCmPerSec; // cm per second max vertical speed
+
     for (size_t i = 0; i < robot_.legCount_; ++i) {
         FootStatusInternal& foot = footStatuses_[i];
 
-        if (foot.state == FootState::Grounded) {
-            foot.desiredTarget.z = 0.f;  // flat on ground
-        } 
-        else if (foot.state == FootState::Lifted) {
-            foot.desiredTarget.z = stepHeight;  // fixed height while lifted
+        Vec2 currentXY{foot.currentPosition.x, foot.currentPosition.y};
+        Vec2 targetXY = foot.stepAreaTarget;
+
+        // Distance from current foot position to target in XY plane
+        float distToTarget = (targetXY - currentXY).length();
+
+        float currentHeight = foot.currentPosition.z;
+
+        // Decide desired target height based on distance
+        float desiredHeight = 0.f;
+
+        if (foot.state == FootState::Lifted) {
+            // If foot is lifted, desired height grows with distance but maxes at stepHeight
+            // The farther from target, the higher the foot should lift (up to stepHeight)
+            desiredHeight = std::min(distToTarget, stepHeight);
+        } else {
+            // Foot on ground → desired height is zero
+            desiredHeight = 0.f;
         }
-        else {
-            foot.desiredTarget.z = 0.f;  // fallback to ground height
+
+        float heightDiff = desiredHeight - currentHeight;
+        float maxHeightChangeThisFrame = maxHeightChangeSpeed * deltaTimeSeconds;
+
+        // Smoothly move height towards desiredHeight with speed limit
+        if (std::abs(heightDiff) <= maxHeightChangeThisFrame) {
+            foot.desiredTarget.z = desiredHeight;
+        } else {
+            foot.desiredTarget.z = currentHeight + (heightDiff > 0 ? maxHeightChangeThisFrame : -maxHeightChangeThisFrame);
         }
     }
 }
+
 
 
 void PathPlanner::pushTargetsToRobot() {
@@ -236,7 +259,7 @@ void PathPlanner::stepPathLogic(const Vec2& joystickInput, float dt) {
         } 
     }
 
-    computeFootHeights();
+    computeFootHeights(dt, joystickInput);  // Update foot heights based on step progress
 
 }
 
@@ -261,30 +284,36 @@ void PathPlanner::updateFootStateTransitionsByGroup() {
 
         anyGroupLifted = true;
 
-        bool allLiftedLegsReadyToGround = true;
+        bool anyLiftedLegReadyToGround = false;
         for (size_t legIndex : group) {
             FootStatusInternal& foot = footStatuses_[legIndex];
             if (foot.state == FootState::Lifted) {
                 Vec2 currentXY{foot.currentPosition.x, foot.currentPosition.y};
                 Vec2 targetXY{foot.stepAreaTarget.x, foot.stepAreaTarget.y};
-                float distToTarget = (targetXY - currentXY).length();
-                if (distToTarget > threshold) {
-                    allLiftedLegsReadyToGround = false;
-                    break;
+                Vec2 toTarget = targetXY - currentXY;
+
+                float distToTarget = toTarget.length();
+
+                // Direction vector for the step area (should be normalized)
+                Vec2 stepDir = foot.stepAreaVector.normalized();
+
+                // Check if overshot: dot product < 0 means went past target
+                float dot = toTarget.x * stepDir.x + toTarget.y * stepDir.y;
+
+                if (distToTarget < threshold * threshold || dot < 0.f) {
+                    anyLiftedLegReadyToGround = true;
+                    break;  // One leg ready is enough
                 }
             }
         }
 
-        if (allLiftedLegsReadyToGround) {
-            // Ground all lifted legs in the group
+        if (anyLiftedLegReadyToGround) {
+            // Ground all lifted legs in the group by resetting their currentPosition to zero
             for (size_t legIndex : group) {
                 FootStatusInternal& foot = footStatuses_[legIndex];
-                if (foot.state == FootState::Lifted) {
-                    Vec2 targetXY{foot.stepAreaTarget.x, foot.stepAreaTarget.y};
+                if (foot.state == FootState::Lifted || foot.state == FootState::Grounded) {
                     foot.state = FootState::Grounded;
                     foot.stepProgress = 0.f;
-                    foot.currentPosition.x = targetXY.x;
-                    foot.currentPosition.y = targetXY.y;
                 }
             }
         }
@@ -307,49 +336,45 @@ void PathPlanner::updateFootStateTransitionsByGroup() {
     // Step 4: Select the next group to lift based on distance to back edge
     selectNextGroupToLift();
 
-    // Spatial-based early lift: check if group is close enough to back edge, this is the snadard lift condition when legs are spaced as intended
-    float earlyLiftRadius = stepAreaRadius_ * (1.f - currentWalkCycle_->earlyLiftFraction_);
-    if (currentWalkCycle_->distToEdgePerGroup[currentWalkCycle_->optimalLiftedGroupIndex_] < earlyLiftRadius) {
+    // Spatial-based early lift: check if group is close enough to back edge, this is the standard lift condition when legs are spaced as intended
+    float distToEdge = currentWalkCycle_->distToEdgePerGroup[currentWalkCycle_->optimalLiftedGroupIndex_];
+    if (distToEdge < threshold) {
         liftDueToEdge = true;
         liftNextGroup = true;
+        std::cout << "[Lift] Due to edge proximity. Distance to edge: " << distToEdge 
+                  << " (threshold: " << threshold << ")\n";
     }
 
     // Condition based on synchronized step area vector length
-    if(!liftNextGroup) {
-
+    if (!liftNextGroup) {
         Vec2 syncStepVec = getSynchronizedStepAreaVector(*currentWalkCycle_);
 
         if (syncStepVec.length() < stepAreaRadius_) {
             liftDueToSyncedStep = true;
             liftNextGroup = true;
-
+            std::cout << "[Lift] Due to synchronized step vector length being small. Length: " << syncStepVec.length() << "\n";
         } else {
-
             float liftedSpeedMultiplier = currentWalkCycle_->liftedSpeedMultiplier_;
             if (liftedSpeedMultiplier < 0.001f) liftedSpeedMultiplier = 0.001f;
-            // Compute maximum distance to target in the group with minimum distance to back edge
             float maxDistToTarget = computeMaxDistanceToTargetInGroup(currentWalkCycle_->optimalLiftedGroupIndex_);
             float syncStepDistanceAhead = syncStepVec.length() - stepAreaRadius_;
             float legCatchupTime = maxDistToTarget / liftedSpeedMultiplier;
 
-            // Timing-based early lift
-            if (legCatchupTime < syncStepDistanceAhead) {
+            if (legCatchupTime > syncStepDistanceAhead) {
                 liftDueToSyncedStep = true;
                 liftNextGroup = true;
+                std::cout << "[Lift] Due to timing-based early lift. legCatchupTime: " << legCatchupTime
+                          << " syncStepDistanceAhead: " << syncStepDistanceAhead << "\n";
             }
         }
     }
 
     // Premptive lift if next group spacing is too small
-    // Early lift decision flag
     bool liftDueToSpacing = false;
 
-    // Decide how many groups to check, e.g., half the available groups
     const size_t groupsToCheck = (currentWalkCycle_->distToEdgePerGroup.size() + 1) / 2;  // half
 
-    if(groupsToCheck > 1 && !liftNextGroup) {
-
-        // Get groups sorted by distToEdge ascending
+    if (groupsToCheck > 1 && !liftNextGroup) {
         std::vector<std::pair<size_t, float>> groupDistances;
         for (size_t i = 0; i < currentWalkCycle_->distToEdgePerGroup.size(); ++i) {
             groupDistances.emplace_back(i, currentWalkCycle_->distToEdgePerGroup[i]);
@@ -357,18 +382,18 @@ void PathPlanner::updateFootStateTransitionsByGroup() {
         std::sort(groupDistances.begin(), groupDistances.end(), 
             [](const auto& a, const auto& b) { return a.second < b.second; });
 
-        // Target fractional spacing in cm or same units as distToEdge
         float targetSpacing = stepAreaRadius_ * 2 * currentWalkCycle_->fractionAhead_;
-        float minAllowedSpacing = targetSpacing * (1 - currentWalkCycle_->earlyLiftFraction_); // 80% of ideal spacing when earlyLiftFraction_ = 0.20
+        float minAllowedSpacing = targetSpacing * (1 - currentWalkCycle_->earlyLiftFraction_);
 
-        // Iterate pairs of consecutive groups in distance order
         for (size_t i = 1; i < groupsToCheck; ++i) {
-            // If spacing less than minimum allowed spacing, trigger early lift
-            float expectedMinSpacing = minAllowedSpacing * (i);  // Scale spacing by position
+            float expectedMinSpacing = minAllowedSpacing * (i);
             if (groupDistances[i].second < expectedMinSpacing) {
                 liftDueToSpacing = true;
                 liftNextGroup = true;
-                break;  // stop checking once condition is met
+                std::cout << "[Lift] Due to group spacing too small. Group " << groupDistances[i].first
+                          << " distance: " << groupDistances[i].second
+                          << " expected min spacing: " << expectedMinSpacing << "\n";
+                break;
             }
         }
     }
@@ -377,17 +402,18 @@ void PathPlanner::updateFootStateTransitionsByGroup() {
         size_t liftGroupIndex = currentWalkCycle_->optimalLiftedGroupIndex_;  // or minDistToBackGroupIndex_
         currentWalkCycle_->lastLiftedGroupIndex_ = liftGroupIndex;
         const auto& group = currentWalkCycle_->getLegGroups()[liftGroupIndex];
+        std::cout << "[Lift] Lifting group " << liftGroupIndex << " legs: ";
         for (size_t legIndex : group) {
+            std::cout << legIndex << " ";
             FootStatusInternal& foot = footStatuses_[legIndex];
             foot.state = FootState::Lifted;
-            foot.stepProgress = 0.f; // Reset progress for lifted legs
+            foot.stepProgress = 0.f;
         }
+        std::cout << std::endl;
     } else {
         // If no group is ready to lift, just return
         return;
     }
-
-
 }
 
 
@@ -444,16 +470,15 @@ void PathPlanner::selectNextGroupToLift() {
 
 
 // Compute minimum distance from current position to stepAreaTarget for all feet
-float PathPlanner::computeMaxForwardDistanceToStepAreaTarget() const {
-    float minDistanceToTargetY = std::numeric_limits<float>::max();
-    float maxForwardDistancetoTarget = -std::numeric_limits<float>::max();
+float PathPlanner::computeMaxDistanceAlongStep() const {
+    float maxDistanceToTargetY = -std::numeric_limits<float>::max(); // Start very low
 
     for (size_t i = 0; i < kNumLegs; ++i) {
         const auto& foot = footStatuses_[i];
 
         if (foot.state != FootState::Grounded) {
             // Skip feet that are lifted (in the air)
-            continue;
+            continue; //skip lifted feet
         }
 
         // Vector from step area center (ideal foot placement) to current foot position
@@ -472,23 +497,23 @@ float PathPlanner::computeMaxForwardDistanceToStepAreaTarget() const {
         // Rotate footPos so stepDirection aligns with Y axis
         Vec2 footForwardPos = rotateZ(footPos, rotationAngleDeg);
 
-        // The Y component is the forward displacement along stepDirection from stepAreaCenter
-        // DistanceToTargetY is the distance from footPos to the step area target along stepdirection axis
-        float DistanceToTargetY = stepAreaRadius_ - footForwardPos.y;
+        // footForwardPos.y is progress along step direction
+        float distanceAlongStep = footForwardPos.y;
 
-        if (DistanceToTargetY < minDistanceToTargetY) {
-            minDistanceToTargetY = DistanceToTargetY;
-            maxForwardDistancetoTarget = footForwardPos.y;
+        if (distanceAlongStep > maxDistanceToTargetY) {
+            maxDistanceToTargetY = distanceAlongStep;
         }
     }
 
-    return maxForwardDistancetoTarget;
+    // std::cout << "Max forward distance to step area target: " << maxDistanceToTargetY << std::endl;
+    return maxDistanceToTargetY;
 }
+
 
 
 // Compute synchronized step area vector based on walk cycle and minimum distance
 Vec2 PathPlanner::getSynchronizedStepAreaVector(const WalkCycle& walkCycle) const {
-    float maxForwardDist = computeMaxForwardDistanceToStepAreaTarget();
+    float maxForwardDist = computeMaxDistanceAlongStep();
 
     // Clamp minForwardDist to 0 if it’s very large (e.g., no grounded feet)
     if (maxForwardDist > stepAreaRadius_ * 2) {
@@ -502,6 +527,7 @@ Vec2 PathPlanner::getSynchronizedStepAreaVector(const WalkCycle& walkCycle) cons
     Vec2 baseDir = footStatuses_[0].stepAreaVector.normalized();
 
     // Return the scaled vector representing the synchronized step target
+    // std::cout << "Synchronized step area vector length: " << scale << std::endl;
     return baseDir * scale;
 }
 
@@ -520,8 +546,8 @@ void PathPlanner::updateSynchronizedStepAreaTargets() {
 
 void PathPlanner::computeDistanceToBackEdgePerGroup(WalkCycle& walkCycle) {
     const auto& legGroups = walkCycle.getLegGroups();
-    walkCycle.timeToEdgePerGroup.clear();
-    walkCycle.timeToEdgePerGroup.resize(legGroups.size());
+    walkCycle.distToEdgePerGroup.clear();
+    walkCycle.distToEdgePerGroup.resize(legGroups.size());
 
     float globalMinDistance = std::numeric_limits<float>::max();
     size_t minDistToBackGroupIndex = 0;
@@ -572,7 +598,7 @@ void PathPlanner::computeDistanceToBackEdgePerGroup(WalkCycle& walkCycle) {
             }
         }
 
-        walkCycle.timeToEdgePerGroup[groupIndex] = minDistanceToBackEdge;
+        walkCycle.distToEdgePerGroup[groupIndex] = minDistanceToBackEdge;
 
         if (minDistanceToBackEdge < globalMinDistance) {
             globalMinDistance = minDistanceToBackEdge;
@@ -610,4 +636,38 @@ float PathPlanner::computeMaxDistanceToTargetInGroup(size_t groupIndex) const {
     }
 
     return maxDistance;
+}
+
+
+void PathPlanner::printDebugStatus() const {
+    std::cout << "PathPlanner Debug Status:" << std::endl;
+    for (size_t i = 0; i < robot_.legCount_; ++i) {
+        const auto& foot = footStatuses_[i];
+
+        // Distance to target (currentPosition to stepAreaTarget)
+        Vec2 currentPos{foot.currentPosition.x, foot.currentPosition.y};
+        Vec2 targetPos = foot.stepAreaTarget;
+        float distToTarget = (targetPos - currentPos).length();
+
+        // Optionally compute distanceToBackEdge per leg (simplified)
+        // For now just print the group min distance from WalkCycle
+        float distToBackEdge = 0.f;
+        if (currentWalkCycle_) {
+            const auto& legGroups = currentWalkCycle_->getLegGroups();
+            for (size_t groupIndex = 0; groupIndex < legGroups.size(); ++groupIndex) {
+                if (std::find(legGroups[groupIndex].begin(), legGroups[groupIndex].end(), i) != legGroups[groupIndex].end()) {
+                    distToBackEdge = currentWalkCycle_->distToEdgePerGroup[groupIndex];
+                    break;
+                }
+            }
+        }
+
+        std::cout << " Leg " << i
+                  << ": stepAreaCenter=(" << foot.stepAreaCenter.x << "," << foot.stepAreaCenter.y << ")"
+                  << " stepAreaTarget=(" << foot.stepAreaTarget.x << "," << foot.stepAreaTarget.y << ")"
+                  << " syncedTarget=(" << foot.stepAreaSyncronizedTarget.x << "," << foot.stepAreaSyncronizedTarget.y << ")"
+                  << " distToBackEdge=" << distToBackEdge
+                  << " distToTarget=" << distToTarget
+                  << std::endl;
+    }
 }
