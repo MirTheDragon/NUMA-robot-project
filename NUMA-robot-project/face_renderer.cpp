@@ -20,8 +20,8 @@ const int maxGazeOffsetX = 60;
 const int maxGazeOffsetY = 40;
 
 const int gazeTransitionFrames   = 10;
-const int gazeIntervalMinFrames  = 60;
-const int gazeIntervalMaxFrames  = 600;
+const int gazeIntervalMinFrames  = 30;
+const int gazeIntervalMaxFrames  = 300;
 
 const int jitterIntervalMinFrames = 30;
 const int jitterIntervalMaxFrames = 120;
@@ -31,7 +31,7 @@ const float pupilGazeFollowRatio = 0.15f;
 const float pupilWidthRatio  = 0.8f;
 const float pupilHeightRatio = 0.8f;
 
-const int totalBlinkFrames = 20;
+const int totalBlinkFrames = 10;
 
 const float minDilation       = 0.80f;
 const float rareMinDilation   = 0.20f;
