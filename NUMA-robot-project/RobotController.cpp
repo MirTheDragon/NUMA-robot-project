@@ -52,16 +52,15 @@ void RobotController::initServoMappingsAndConfigs(int legCount) {
         servoControllers_[2].setServoConfig(0, ServoConfig("Leg0_HipVertical", 500, 2500, 180.f, -90.f, 90.f));
         servoControllers_[1].setServoConfig(1, ServoConfig("Leg0_Knee", 500, 2500, 270.f, -135.f, 135.f));
     }
-    if (legCount > 1) {
-        // --- Leg 1 (Right Front, 60 deg) ---
+        if (legCount > 1) {
         legs[1] = ThreePointLeg(60.f);
         servoMappings_[1][0] = {1, 2};
         servoMappings_[1][1] = {2, 1};
         servoMappings_[1][2] = {1, 3};
 
-        servoControllers_[1].setServoConfig(2, ServoConfig("Leg1_HipHorizontal", 500, 2500, 270.f, -90.f, 90.f));
+        servoControllers_[1].setServoConfig(2, ServoConfig("Leg1_HipHorizontal", 500, 2500, 270.f, -135.f, 135.f));
         servoControllers_[2].setServoConfig(1, ServoConfig("Leg1_HipVertical", 500, 2500, 180.f, -90.f, 90.f));
-        servoControllers_[1].setServoConfig(3, ServoConfig("Leg1_Knee", 500, 2500, 140.f, 0.f, 140.f));
+        servoControllers_[1].setServoConfig(3, ServoConfig("Leg1_Knee", 500, 2500, 270.f, -135.f, 135.f));
     }
     if (legCount > 2) {
         // --- Leg 2 (Left Front, 120 deg) ---
@@ -70,9 +69,9 @@ void RobotController::initServoMappingsAndConfigs(int legCount) {
         servoMappings_[2][1] = {2, 2};
         servoMappings_[2][2] = {1, 5};
 
-        servoControllers_[1].setServoConfig(4, ServoConfig("Leg2_HipHorizontal", 500, 2500, 270.f, -90.f, 90.f));
+        servoControllers_[1].setServoConfig(4, ServoConfig("Leg2_HipHorizontal", 500, 2500, 270.f, -135.f, 135.f));
         servoControllers_[2].setServoConfig(2, ServoConfig("Leg2_HipVertical", 500, 2500, 180.f, -90.f, 90.f));
-        servoControllers_[1].setServoConfig(5, ServoConfig("Leg2_Knee", 500, 2500, 140.f, 0.f, 140.f));
+        servoControllers_[1].setServoConfig(5, ServoConfig("Leg2_Knee", 500, 2500, 270.f, -135.f, 135.f));
     }
     if (legCount > 3) {
         // --- Leg 3 (Left Middle, 180 deg) ---
@@ -81,9 +80,9 @@ void RobotController::initServoMappingsAndConfigs(int legCount) {
         servoMappings_[3][1] = {2, 3};
         servoMappings_[3][2] = {1, 7};
 
-        servoControllers_[1].setServoConfig(6, ServoConfig("Leg3_HipHorizontal", 500, 2500, 270.f, -90.f, 90.f));
+        servoControllers_[1].setServoConfig(6, ServoConfig("Leg3_HipHorizontal", 500, 2500, 270.f, -135.f, 135.f));
         servoControllers_[2].setServoConfig(3, ServoConfig("Leg3_HipVertical", 500, 2500, 180.f, -90.f, 90.f));
-        servoControllers_[1].setServoConfig(7, ServoConfig("Leg3_Knee", 500, 2500, 140.f, 0.f, 140.f));
+        servoControllers_[1].setServoConfig(7, ServoConfig("Leg3_Knee", 500, 2500, 270.f, -135.f, 135.f));
     }
     if (legCount > 4) {
         // --- Leg 4 (Left Back, 240 deg) ---
@@ -92,9 +91,9 @@ void RobotController::initServoMappingsAndConfigs(int legCount) {
         servoMappings_[4][1] = {2, 4};
         servoMappings_[4][2] = {1, 9};
 
-        servoControllers_[1].setServoConfig(8, ServoConfig("Leg4_HipHorizontal", 500, 2500, 270.f, -90.f, 90.f));
+        servoControllers_[1].setServoConfig(8, ServoConfig("Leg4_HipHorizontal", 500, 2500, 270.f, -135.f, 135.f));
         servoControllers_[2].setServoConfig(4, ServoConfig("Leg4_HipVertical", 500, 2500, 180.f, -90.f, 90.f));
-        servoControllers_[1].setServoConfig(9, ServoConfig("Leg4_Knee", 500, 2500, 140.f, 0.f, 140.f));
+        servoControllers_[1].setServoConfig(9, ServoConfig("Leg4_Knee", 500, 2500, 270.f, -135.f, 135.f));
     }
     if (legCount > 5) {
         // --- Leg 5 (Right Back, 300 deg) ---
@@ -103,9 +102,9 @@ void RobotController::initServoMappingsAndConfigs(int legCount) {
         servoMappings_[5][1] = {2, 5};
         servoMappings_[5][2] = {1, 11};
 
-        servoControllers_[1].setServoConfig(10, ServoConfig("Leg5_HipHorizontal", 500, 2500, 270.f, -90.f, 90.f));
+        servoControllers_[1].setServoConfig(10, ServoConfig("Leg5_HipHorizontal", 500, 2500, 270.f, -135.f, 135.f));
         servoControllers_[2].setServoConfig(5, ServoConfig("Leg5_HipVertical", 500, 2500, 180.f, -90.f, 90.f));
-        servoControllers_[1].setServoConfig(11, ServoConfig("Leg5_Knee", 500, 2500, 140.f, 0.f, 140.f));
+        servoControllers_[1].setServoConfig(11, ServoConfig("Leg5_Knee", 500, 2500, 270.f, -135.f, 135.f));
     }
 }
 
@@ -115,6 +114,15 @@ void RobotController::updateAllIK() {
         // Convert stored foot target in world coordinates to body coordinates
         Vec3 footInBody = Body.worldToLegPlaneCoords(footTargetsWorld_[i]); // you need footTargetsWorld_ to hold world targets
         
+        /*
+        // Assuming `Vec3 bodyPos` is the position transformed into the body coordinate system
+        std::cout << "Leg " << i
+                << " foot target in body coords: ("
+                << footInBody.x << ", "
+                << footInBody.y << ", "
+                << footInBody.z << ")\n";
+
+        */        
         // Set the leg's foot target to leg coordinates for IK
         legs[i].footTarget = footInBody;
         

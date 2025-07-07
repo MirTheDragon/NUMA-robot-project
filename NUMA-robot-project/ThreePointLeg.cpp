@@ -2,6 +2,7 @@
 #include <algorithm>  // for std::clamp
 #include <cstdio>  // for printf
 #include <cmath>
+#include <iostream>
 
 ThreePointLeg::ThreePointLeg(float legAngleDeg)
     : legAngleRad_(deg2rad(legAngleDeg)) {}
@@ -9,7 +10,7 @@ ThreePointLeg::ThreePointLeg(float legAngleDeg)
 // Main transform: body coords -> leg coords
 Vec3 ThreePointLeg::bodyToLegCoords() {
     Vec3 v = footTarget;
-
+    
     // 1) Rotate around Z by (-legAngleRad)
     rotateZ(v, -legAngleRad_);
 
@@ -18,6 +19,7 @@ Vec3 ThreePointLeg::bodyToLegCoords() {
 
     // 3) Rotate around Y by -45 degrees (-pi/4 radians) (servo tilt downward)
     rotateY(v, -PI/4);
+
 
     footInLegTarget = v;
     return footInLegTarget;  // Return the transformed foot position in leg coordinates
@@ -86,7 +88,7 @@ void ThreePointLeg::solveIK() {
     // - Knee servo: offset for servo zero and direction.
     
 
-    servoHipHorizontalRad = 0 - (rawHipHorizontalRad - hipHorizontalServoOffsetRad_) * hipHorizontalGearRatio;  // invert direction
+    servoHipHorizontalRad = (rawHipHorizontalRad - hipHorizontalServoOffsetRad_) * hipHorizontalGearRatio;  // invert direction
     servoHipVerticalRad = 0 - (rawHipVerticalRad - hipVerticalServoOffsetRad_) * hipVerticalGearRatio;  // invert and offset
     servoKneeRad = (rawKneeRad - kneeServoOffsetRad_) * kneeGearRatio;  // apply offset, no direction inversion assumed
 }

@@ -172,7 +172,7 @@ public:
     // Array of leg groups, each group contains indices of legs
     std::vector<std::vector<size_t>> legGroups_;
     float liftedSpeedMultiplier_;
-    float maxRobotSpeedCmPerSec = 10.f;  // max desired speed of grounded legs
+    float maxRobotSpeedCmPerSec = 5.f;  // max desired speed of grounded legs
     float fractionAhead_;  // fraction of step area radius for spacing
     float earlyLiftFraction_ = 0.3f; // fraction of step duration to lift early
     float positionThreshold_ = 1.0f;  // threshold distance to switch foot states (cm)

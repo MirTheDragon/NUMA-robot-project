@@ -52,6 +52,19 @@ void PathPlanner::update(const Vec2& joystickInput, float deltaTimeSeconds) {
 
     // Push 3D foot targets (including height) to robot controller
     pushTargetsToRobot();
+
+    /*
+    std::cout << "[PathPlanner] Leg Status Summary:\n";
+    for (size_t i = 0; i < robot_.legCount_; ++i) {
+        const auto& foot = footStatuses_[i];
+        std::cout << "  Leg " << i
+                << " Position: (" << foot.currentPosition.x << ", "
+                                    << foot.currentPosition.y << ", "
+                                    << foot.currentPosition.z << ")"
+                << "  StepAreaCenter: (" << foot.stepAreaCenter.x << ", "
+                                        << foot.stepAreaCenter.y << ")\n";
+    }
+    */
 }
 
 void PathPlanner::updateStepAreaCenter(size_t legIndex, float headingRad) {
@@ -95,7 +108,6 @@ void PathPlanner::computeFootHeights(float deltaTimeSeconds, const Vec2& joystic
 
     for (size_t i = 0; i < robot_.legCount_; ++i) {
         FootStatusInternal& foot = footStatuses_[i];
-
         Vec2 currentXY{foot.currentPosition.x, foot.currentPosition.y};
         Vec2 targetXY = foot.stepAreaTarget;
 
@@ -341,8 +353,8 @@ void PathPlanner::updateFootStateTransitionsByGroup() {
     if (distToEdge < threshold) {
         liftDueToEdge = true;
         liftNextGroup = true;
-        std::cout << "[Lift] Due to edge proximity. Distance to edge: " << distToEdge 
-                  << " (threshold: " << threshold << ")\n";
+        //std::cout << "[Lift] Due to edge proximity. Distance to edge: " << distToEdge 
+        //          << " (threshold: " << threshold << ")\n";
     }
 
     // Condition based on synchronized step area vector length
@@ -352,7 +364,7 @@ void PathPlanner::updateFootStateTransitionsByGroup() {
         if (syncStepVec.length() < stepAreaRadius_) {
             liftDueToSyncedStep = true;
             liftNextGroup = true;
-            std::cout << "[Lift] Due to synchronized step vector length being small. Length: " << syncStepVec.length() << "\n";
+            //std::cout << "[Lift] Due to synchronized step vector length being small. Length: " << syncStepVec.length() << "\n";
         } else {
             float liftedSpeedMultiplier = currentWalkCycle_->liftedSpeedMultiplier_;
             if (liftedSpeedMultiplier < 0.001f) liftedSpeedMultiplier = 0.001f;
@@ -363,8 +375,8 @@ void PathPlanner::updateFootStateTransitionsByGroup() {
             if (legCatchupTime > syncStepDistanceAhead) {
                 liftDueToSyncedStep = true;
                 liftNextGroup = true;
-                std::cout << "[Lift] Due to timing-based early lift. legCatchupTime: " << legCatchupTime
-                          << " syncStepDistanceAhead: " << syncStepDistanceAhead << "\n";
+                //std::cout << "[Lift] Due to timing-based early lift. legCatchupTime: " << legCatchupTime
+                //          << " syncStepDistanceAhead: " << syncStepDistanceAhead << "\n";
             }
         }
     }
@@ -390,9 +402,9 @@ void PathPlanner::updateFootStateTransitionsByGroup() {
             if (groupDistances[i].second < expectedMinSpacing) {
                 liftDueToSpacing = true;
                 liftNextGroup = true;
-                std::cout << "[Lift] Due to group spacing too small. Group " << groupDistances[i].first
-                          << " distance: " << groupDistances[i].second
-                          << " expected min spacing: " << expectedMinSpacing << "\n";
+                //std::cout << "[Lift] Due to group spacing too small. Group " << groupDistances[i].first
+                //          << " distance: " << groupDistances[i].second
+                //          << " expected min spacing: " << expectedMinSpacing << "\n";
                 break;
             }
         }
@@ -402,7 +414,7 @@ void PathPlanner::updateFootStateTransitionsByGroup() {
         size_t liftGroupIndex = currentWalkCycle_->optimalLiftedGroupIndex_;  // or minDistToBackGroupIndex_
         currentWalkCycle_->lastLiftedGroupIndex_ = liftGroupIndex;
         const auto& group = currentWalkCycle_->getLegGroups()[liftGroupIndex];
-        std::cout << "[Lift] Lifting group " << liftGroupIndex << " legs: ";
+        //std::cout << "[Lift] Lifting group " << liftGroupIndex << " legs: ";
         for (size_t legIndex : group) {
             std::cout << legIndex << " ";
             FootStatusInternal& foot = footStatuses_[legIndex];
@@ -459,10 +471,10 @@ void PathPlanner::selectNextGroupToLift() {
     currentWalkCycle_->minDistToBackGroupIndex_ = primeCandidate;
     if (primeCandidate != adjacentPrimeCandidate) {
         // Repport non cyclical group change
-        std::cout << "PathPlanner: Non cyclical switching to group " << primeCandidate
-                  << " with min distance " << distances[primeCandidate]
-                  << " (adjacent candidate was " << adjacentPrimeCandidate
-                  << " with distance " << distances[adjacentPrimeCandidate] << ")" << std::endl;
+        //std::cout << "PathPlanner: Non cyclical switching to group " << primeCandidate
+        //          << " with min distance " << distances[primeCandidate]
+        //          << " (adjacent candidate was " << adjacentPrimeCandidate
+        //          << " with distance " << distances[adjacentPrimeCandidate] << ")" << std::endl;
     }
 }
 
