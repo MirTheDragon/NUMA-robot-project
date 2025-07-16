@@ -1,9 +1,11 @@
+
 #include "gamepad.hpp"
 #include <libevdev/libevdev.h>
 #include <thread>
 #include <chrono>
-#include <vector>   // for std::vector
-#include <map>      // for std::map
+#include <vector>
+#include <map>
+#include <unordered_map>
 #include <fcntl.h>
 #include <unistd.h>
 #include <linux/joystick.h>
@@ -13,8 +15,10 @@
 #include <iostream>
 #include <algorithm>
 
+static constexpr float EPSILON = 0.01f;             
+static constexpr int DEBOUNCE_MS = 75;              // Button debounce ms
+static constexpr float JOYSTICK_DEADZONE = 0.02f;   // 2% deadzone
 
-static constexpr float EPSILON = 0.01f;
 
 GamepadController::GamepadController() {
     fd = -1;
@@ -61,7 +65,6 @@ void GamepadController::scanDevices() {
             if (dev_name) {
                 std::string name_str(dev_name);
 
-                // Skip devices with "mouse" or "keyboard" in their name
                 if (contains_case_insensitive(name_str, "mouse") ||
                     contains_case_insensitive(name_str, "keyboard")) {
                     libevdev_free(dev);
@@ -69,7 +72,6 @@ void GamepadController::scanDevices() {
                     continue;
                 }
 
-                // Accept devices with "8BitDo" in name (or change to your exact controller name)
                 if (contains_case_insensitive(name_str, "8BitDo")) {
                     fd = fd_test;
                     devicePath = path;
@@ -85,51 +87,41 @@ void GamepadController::scanDevices() {
     }
     closedir(dir);
 
-    // Basic button map for example
     buttonMap[304] = "A";
     buttonMap[305] = "B";
-    buttonMap[307] = "X";
-    buttonMap[308] = "Y";
+    buttonMap[307] = "Y";
+    buttonMap[308] = "X";
     buttonMap[310] = "LB";
     buttonMap[311] = "RB";
     buttonMap[314] = "Minus";
     buttonMap[315] = "Plus";
-    buttonMap[317] = "Square";
-    // buttonMap[544] = "Up";
-    // buttonMap[545] = "Down";
-    // buttonMap[546] = "Left";
-    // buttonMap[547] = "Right";
+    buttonMap[316] = "Star";
+    buttonMap[317] = "L3";
+    buttonMap[318] = "R3";
+    buttonMap[9991] = "L4";
+    buttonMap[9992] = "R4";
 }
 
 bool GamepadController::initialize(const std::vector<ComboEvent>& combos) {
     scanDevices();
     if (fd == -1) {
-        std::cerr << "No compatible gamepad found.\n";
+        std::cerr << "No compatible gamepad found.";
         return false;
     }
 
     std::cout << "Opened device: " << devicePath << std::endl;
 
-
-    // Load combos if needed
     for (const auto& combo : combos) {
         addCombo(combo.holdButton, combo.sequence, combo.name);
     }
 
-
-    std::cout << "Press any button to continue...\n";
-
+    std::cout << "Press any button to continue...";
     input_event ev;
 
     while (true) {
         ssize_t n = read(fd, &ev, sizeof(ev));
         if (n == sizeof(ev)) {
-            std::cout << "Event type: " << (int)ev.type
-                      << ", code: " << (int)ev.code
-                      << ", value: " << ev.value << std::endl;
-
             if (ev.type == EV_KEY && ev.value == 1) {
-                std::cout << "Button press detected, continuing...\n";
                 break;
             }
         } else {
@@ -140,199 +132,142 @@ bool GamepadController::initialize(const std::vector<ComboEvent>& combos) {
     return true;
 }
 
-
 void GamepadController::update(GamepadState &state) {
-    if (fd == -1) return;
+    static auto lastReconnectAttempt = std::chrono::steady_clock::now();
+    static std::unordered_map<std::string, std::chrono::steady_clock::time_point> lastEventTimes;
+
+    if (fd == -1) {
+        auto now = std::chrono::steady_clock::now();
+        if (now - lastReconnectAttempt > std::chrono::milliseconds(500)) {
+            lastReconnectAttempt = now;
+            scanDevices();
+            if (fd != -1) {
+                std::cout << "✅ Controller reconnected: " << devicePath << std::endl;
+            }
+        }
+        return;
+    }
 
     input_event ev;
-    while (read(fd, &ev, sizeof(ev)) > 0) {
-        if (ev.type == EV_ABS && (ev.code == 16 || ev.code == 17)) {
-            // Handle D-pad axes manually and push events for presses/releases
-            if (ev.code == 16) { // ABS_HAT0X (Left/Right)
-                if (ev.value == -1) {
-                    if (buttonStates["Left"] == 0)
-                        pendingEvents.push_back({"button", "Left", "pressed"});
-                    buttonStates["Left"] = 1;
+    ssize_t readSize;
 
-                    if (buttonStates["Right"] == 1)
-                        pendingEvents.push_back({"button", "Right", "released"});
-                    buttonStates["Right"] = 0;
-
-                    recentInputs.push_back("Left");
-                } else if (ev.value == 1) {
-                    if (buttonStates["Right"] == 0)
-                        pendingEvents.push_back({"button", "Right", "pressed"});
-                    buttonStates["Right"] = 1;
-
-                    if (buttonStates["Left"] == 1)
-                        pendingEvents.push_back({"button", "Left", "released"});
-                    buttonStates["Left"] = 0;
-
-                    recentInputs.push_back("Right");
-                } else { // Neutral, release both if pressed
-                    if (buttonStates["Left"] == 1)
-                        pendingEvents.push_back({"button", "Left", "released"});
-                    if (buttonStates["Right"] == 1)
-                        pendingEvents.push_back({"button", "Right", "released"});
-                    buttonStates["Left"] = 0;
-                    buttonStates["Right"] = 0;
-                }
-            } else if (ev.code == 17) { // ABS_HAT0Y (Up/Down)
-                if (ev.value == -1) {
-                    if (buttonStates["Up"] == 0)
-                        pendingEvents.push_back({"button", "Up", "pressed"});
-                    buttonStates["Up"] = 1;
-
-                    if (buttonStates["Down"] == 1)
-                        pendingEvents.push_back({"button", "Down", "released"});
-                    buttonStates["Down"] = 0;
-
-                    recentInputs.push_back("Up");
-                } else if (ev.value == 1) {
-                    if (buttonStates["Down"] == 0)
-                        pendingEvents.push_back({"button", "Down", "pressed"});
-                    buttonStates["Down"] = 1;
-
-                    if (buttonStates["Up"] == 1)
-                        pendingEvents.push_back({"button", "Up", "released"});
-                    buttonStates["Up"] = 0;
-
-                    recentInputs.push_back("Down");
-                } else { // Neutral, release both if pressed
-                    if (buttonStates["Up"] == 1)
-                        pendingEvents.push_back({"button", "Up", "released"});
-                    if (buttonStates["Down"] == 1)
-                        pendingEvents.push_back({"button", "Down", "released"});
-                    buttonStates["Up"] = 0;
-                    buttonStates["Down"] = 0;
-                }
-            }
-        } else if (ev.type == EV_KEY) {
-            // For key events, update states and push press/release events
+    while ((readSize = read(fd, &ev, sizeof(ev))) > 0) {
+        if (ev.type == EV_KEY) {
             auto it = buttonMap.find(ev.code);
             if (it != buttonMap.end()) {
-                std::string buttonName = it->second;
+                std::string name = it->second;
                 int val = ev.value;
-                int oldVal = buttonStates[buttonName];
-                buttonStates[buttonName] = val;
-
-                if (val == 1 && oldVal != 1) {
-                    pendingEvents.push_back({"button", buttonName, "pressed"});
-                    recentInputs.push_back(buttonName);
-                    if (recentInputs.size() > 10) recentInputs.erase(recentInputs.begin());
-                } else if (val == 0 && oldVal != 0) {
-                    pendingEvents.push_back({"button", buttonName, "released"});
+                int prevVal = buttonStates[name];
+                auto now = std::chrono::steady_clock::now();
+                auto &lastTime = lastEventTimes[name];
+                if (val != prevVal && (now - lastTime) >= std::chrono::milliseconds(DEBOUNCE_MS)) {
+                    buttonStates[name] = val;
+                    lastTime = now;
+                    if (val == 1) {
+                        bool triggered = false;
+                        for (const auto& [held, state] : buttonStates) {
+                            if (state == 1 && held != name) {
+                                std::string combo = held + "+" + name;
+                                pendingEvents.push_back({"combo", combo});
+                                triggered = true;
+                            }
+                        }
+                        if (!triggered)
+                            pendingEvents.push_back({"button", name, "pressed"});
+                        recentInputs.push_back(name);
+                        if (recentInputs.size() > 10) recentInputs.erase(recentInputs.begin());
+                    } else if (val == 0) {
+                        pendingEvents.push_back({"button", name, "released"});
+                    }
                 }
             }
         } else {
-            // Other event types (e.g., joystick axes)
             handleEvent(ev);
         }
+    }
+
+    if (readSize < 0 && (errno == ENODEV || errno == EIO)) {
+        std::cerr << "⚠️ Controller disconnected.";
+        close(fd);
+        fd = -1;
+        return;
     }
 
     updateJoysticks();
     detectCombos();
 
-    // Update the external state with current button states, sticks, triggers
     state.buttonEvents.clear();
-    for (const auto& [buttonName, val] : buttonStates) {
-        if (val == 1)
-            state.buttonEvents[buttonName] = ButtonEvent::Pressed;
-        else if (val == 0)
-            state.buttonEvents[buttonName] = ButtonEvent::Released;
+    for (const auto& [name, val] : buttonStates) {
+        if (val == 1) state.buttonEvents[name] = ButtonEvent::Pressed;
+        else if (val == 0) state.buttonEvents[name] = ButtonEvent::Released;
     }
     state.leftStick = leftStick;
     state.rightStick = rightStick;
     state.triggers = triggers;
 }
 
-
-
-
-
-void GamepadController::handleEvent(const input_event& ev) {
-    if (ev.type == EV_KEY) {
-        auto it = buttonMap.find(ev.code);
-        if (it != buttonMap.end()) {
-            buttonStates[it->second] = ev.value;
-            if (ev.value == 1) {
-                recentInputs.push_back(it->second);
-                if (recentInputs.size() > 10) recentInputs.erase(recentInputs.begin());
-            }
-        }
-    } else if (ev.type == EV_ABS) {
-        switch (ev.code) {
-            case 0: leftStick.x_raw = ev.value / 32767.0f; break;
-            case 1: leftStick.y_raw = ev.value / 32767.0f; break;
-            case 3: rightStick.x_raw = ev.value / 32767.0f; break;
-            case 4: rightStick.y_raw = ev.value / 32767.0f; break;
-            case 2: triggers.left = ev.value / 255.0f; break;
-            case 5: triggers.right = ev.value / 255.0f; break;
-
-            case 16: // ABS_HAT0X: Left(-1), Neutral(0), Right(1)
-                if (ev.value == -1) {
-                    buttonStates["Left"] = 1;
-                    buttonStates["Right"] = 0;
-                    recentInputs.push_back("Left");
-                } else if (ev.value == 1) {
-                    buttonStates["Right"] = 1;
-                    buttonStates["Left"] = 0;
-                    recentInputs.push_back("Right");
-                } else {
-                    buttonStates["Left"] = 0;
-                    buttonStates["Right"] = 0;
-                }
-                break;
-
-            case 17: // ABS_HAT0Y: Up(-1), Neutral(0), Down(1)
-                if (ev.value == -1) {
-                    buttonStates["Up"] = 1;
-                    buttonStates["Down"] = 0;
-                    recentInputs.push_back("Up");
-                } else if (ev.value == 1) {
-                    buttonStates["Down"] = 1;
-                    buttonStates["Up"] = 0;
-                    recentInputs.push_back("Down");
-                } else {
-                    buttonStates["Up"] = 0;
-                    buttonStates["Down"] = 0;
-                }
-                break;
-        }
-    }
-}
-
-void GamepadController::updateJoysticks() {
-    // Circularize left stick
-    squareToCircle(leftStick.x_raw, leftStick.y_raw, leftStick.x, leftStick.y);
+void GamepadController::printJoystickAndTriggerChanges() {
+    // Calculate magnitude and angle for left stick
     leftStick.magnitude = std::sqrt(leftStick.x * leftStick.x + leftStick.y * leftStick.y);
     leftStick.angle = std::atan2(leftStick.y, leftStick.x);
 
-    // Circularize right stick
-    squareToCircle(rightStick.x_raw, rightStick.y_raw, rightStick.x, rightStick.y);
+    // Same for right stick
     rightStick.magnitude = std::sqrt(rightStick.x * rightStick.x + rightStick.y * rightStick.y);
     rightStick.angle = std::atan2(rightStick.y, rightStick.x);
+
+    // Only print if there are meaningful changes (to avoid spam)
+    bool leftChanged =
+        std::fabs(leftStick.x - prevLeftStick.x) > 0.01f ||
+        std::fabs(leftStick.y - prevLeftStick.y) > 0.01f;
+    bool rightChanged =
+        std::fabs(rightStick.x - prevRightStick.x) > 0.01f ||
+        std::fabs(rightStick.y - prevRightStick.y) > 0.01f;
+    bool triggersChanged =
+        std::fabs(triggers.left - prevTriggers.left) > 0.01f ||
+        std::fabs(triggers.right - prevTriggers.right) > 0.01f;
+
+    if (leftChanged || rightChanged || triggersChanged) {
+        printf("\n-- Joystick & Trigger State --\n");
+
+        printf("Left Stick  - X: %+ .6f | Y: %+ .6f | Mag: %.6f | Angle: %.2f°\n",
+            leftStick.x, leftStick.y, leftStick.magnitude, leftStick.angle * (180.0f / M_PI));
+
+        printf("Right Stick - X: %+ .6f | Y: %+ .6f | Mag: %.6f | Angle: %.2f°\n",
+            rightStick.x, rightStick.y, rightStick.magnitude, rightStick.angle * (180.0f / M_PI));
+
+        printf("Triggers    - LT: %.3f | RT: %.3f\n",
+            triggers.left, triggers.right);
+
+        printf("-------------------------------\n");
+    }
+
+    // Update previous state
+    prevLeftStick = leftStick;
+    prevRightStick = rightStick;
+    prevTriggers = triggers;
 }
 
 
-void GamepadController::addCombo(const std::string& holdButton, const std::vector<std::string>& sequence, const std::string& eventName) {
-    std::string key = holdButton + ":";
-    for (const auto& s : sequence) key += s + ",";
-    activeCombos[eventName] = {holdButton};
-    activeCombos[eventName].insert(activeCombos[eventName].end(), sequence.begin(), sequence.end());
+std::vector<GamepadEvent> GamepadController::pollEvents() {
+    auto events = pendingEvents;
+    pendingEvents.clear();
+    return events;
+}
+
+void GamepadController::addCombo(const std::string& hold, const std::vector<std::string>& sequence, const std::string& name) {
+    activeCombos[name] = {hold};
+    activeCombos[name].insert(activeCombos[name].end(), sequence.begin(), sequence.end());
 }
 
 void GamepadController::detectCombos() {
     for (const auto& pair : activeCombos) {
-        const std::string& name = pair.first;
-        const auto& sequence = pair.second;
-
-        if (!buttonStates[sequence[0]]) continue; // Holding condition not met
-
-        if (recentInputs.size() < sequence.size() - 1) continue;
+        const auto& name = pair.first;
+        const auto& seq = pair.second;
+        if (!buttonStates[seq[0]]) continue;
+        if (recentInputs.size() < seq.size() - 1) continue;
         bool match = true;
-        for (size_t i = 1; i < sequence.size(); ++i) {
-            if (recentInputs[recentInputs.size() - sequence.size() + i] != sequence[i]) {
+        for (size_t i = 1; i < seq.size(); ++i) {
+            if (recentInputs[recentInputs.size() - seq.size() + i] != seq[i]) {
                 match = false;
                 break;
             }
@@ -344,73 +279,113 @@ void GamepadController::detectCombos() {
     }
 }
 
-bool GamepadController::isButtonPressed(const std::string& name) const {
-    auto it = buttonStates.find(name);
-    return it != buttonStates.end() && it->second;
+void GamepadController::simulateButton(const std::string& name, const std::chrono::steady_clock::time_point& now,
+    std::unordered_map<std::string, std::chrono::steady_clock::time_point>& lastEventTimes) {
+    if (buttonStates[name] != 1 && (now - lastEventTimes[name]) >= std::chrono::milliseconds(DEBOUNCE_MS)) {
+        buttonStates[name] = 1;
+        lastEventTimes[name] = now;
+        pendingEvents.push_back({"button", name, "pressed"});
+        recentInputs.push_back(name);
+        if (recentInputs.size() > 10) recentInputs.erase(recentInputs.begin());
+    }
 }
 
-bool GamepadController::pollCombo(std::string& outComboName) {
-    auto events = pollEvents();
-    for (const auto& e : events) {
-        if (e.type == "combo") {
-            outComboName = e.name;
-            return true;
+void GamepadController::simulateRelease(const std::string& name, const std::chrono::steady_clock::time_point& now,
+    std::unordered_map<std::string, std::chrono::steady_clock::time_point>& lastEventTimes) {
+    if (buttonStates[name] == 1 && (now - lastEventTimes[name]) >= std::chrono::milliseconds(DEBOUNCE_MS)) {
+        buttonStates[name] = 0;
+        lastEventTimes[name] = now;
+        pendingEvents.push_back({"button", name, "released"});
+    }
+}
+
+
+void GamepadController::handleEvent(const input_event& ev) {
+    static std::unordered_map<std::string, std::chrono::steady_clock::time_point> lastEventTimes;
+
+    const auto now = std::chrono::steady_clock::now();
+
+    if (ev.type == EV_ABS && ev.code < ABS_CNT) {
+        absState[ev.code] = ev.value;
+    }
+
+
+    if (ev.type == EV_ABS) {
+        if (ev.code == ABS_HAT0X) {
+            if (ev.value == -1) {
+                simulateButton("Left", now, lastEventTimes);
+                simulateRelease("Right", now, lastEventTimes);
+            } else if (ev.value == 1) {
+                simulateButton("Right", now, lastEventTimes);
+                simulateRelease("Left", now, lastEventTimes);
+            } else {
+                simulateRelease("Left", now, lastEventTimes);
+                simulateRelease("Right", now, lastEventTimes);
+            }
+        } else if (ev.code == ABS_HAT0Y) {
+            if (ev.value == -1) {
+                simulateButton("Up", now, lastEventTimes);
+                simulateRelease("Down", now, lastEventTimes);
+            } else if (ev.value == 1) {
+                simulateButton("Down", now, lastEventTimes);
+                simulateRelease("Up", now, lastEventTimes);
+            } else {
+                simulateRelease("Up", now, lastEventTimes);
+                simulateRelease("Down", now, lastEventTimes);
+            }
         }
     }
-    return false;
+
+    if (ev.type == EV_ABS) {
+        switch (ev.code) {
+            case 0: leftStick.x_raw = ev.value / 32767.0f; break;
+            case 1: leftStick.y_raw = ev.value / 32767.0f; break;
+            case 2: triggers.left = ev.value / 255.0f; break;
+            case 3: rightStick.x_raw = ev.value / 32767.0f; break;
+            case 4: rightStick.y_raw = ev.value / 32767.0f; break;
+            case 5: triggers.right = ev.value / 255.0f; break;
+        }
+    }
 }
 
-std::vector<GamepadEvent> GamepadController::pollEvents() {
-    auto out = pendingEvents;
-    pendingEvents.clear();
-    return out;
+void GamepadController::updateJoysticks() {
+    auto normalizeAxis = [](int16_t value) -> float {
+        return static_cast<float>(value) / 32768.0f;
+    };
+
+    // Normalize and store raw stick input
+    leftStick.x_raw = normalizeAxis(absState[ABS_X]);
+    leftStick.y_raw = normalizeAxis(absState[ABS_Y]);
+    rightStick.x_raw = normalizeAxis(absState[ABS_RX]);
+    rightStick.y_raw = normalizeAxis(absState[ABS_RY]);
+
+    // Convert square to circular mapping
+    squareToCircle(leftStick.x_raw, leftStick.y_raw, leftStick.x, leftStick.y);
+    squareToCircle(rightStick.x_raw, rightStick.y_raw, rightStick.x, rightStick.y);
+
+    // Calculate magnitude
+    leftStick.magnitude = std::sqrt(leftStick.x * leftStick.x + leftStick.y * leftStick.y);
+    rightStick.magnitude = std::sqrt(rightStick.x * rightStick.x + rightStick.y * rightStick.y);
+
+    // Apply deadzone by zeroing out small values
+    if (leftStick.magnitude < JOYSTICK_DEADZONE) {
+        leftStick.x = leftStick.y = leftStick.magnitude = 0.0f;
+    }
+
+    if (rightStick.magnitude < JOYSTICK_DEADZONE) {
+        rightStick.x = rightStick.y = rightStick.magnitude = 0.0f;
+    }
+
+    // Calculate angles (if needed)
+    leftStick.angle = (leftStick.magnitude > 0.0f) ? std::atan2(leftStick.y, leftStick.x) : 0.0f;
+    rightStick.angle = (rightStick.magnitude > 0.0f) ? std::atan2(rightStick.y, rightStick.x) : 0.0f;
 }
 
-// Convert square input range [-1,1]x[-1,1] to circular range with magnitude capped at 1
+
 void GamepadController::squareToCircle(float x_in, float y_in, float &x_out, float &y_out) {
-    // Clamp inputs just in case (optional)
     float x = std::max(-1.0f, std::min(1.0f, x_in));
     float y = std::max(-1.0f, std::min(1.0f, y_in));
 
-    // Apply the formula from https://www.gamasutra.com/view/feature/131790/simple_but_effective_trigonometry.php
     x_out = x * std::sqrt(1.0f - (y * y) / 2.0f);
     y_out = y * std::sqrt(1.0f - (x * x) / 2.0f);
-}
-
-
-void GamepadController::printJoystickAndTriggerChanges() {
-    auto changed = [](float a, float b) {
-        return std::fabs(a - b) > EPSILON;
-    };
-
-    bool leftChanged = changed(leftStick.x, prevLeftStick.x) ||
-                       changed(leftStick.y, prevLeftStick.y) ||
-                       changed(leftStick.magnitude, prevLeftStick.magnitude);
-
-    bool rightChanged = changed(rightStick.x, prevRightStick.x) ||
-                        changed(rightStick.y, prevRightStick.y) ||
-                        changed(rightStick.magnitude, prevRightStick.magnitude);
-
-    bool triggersChanged = changed(triggers.left, prevTriggers.left) ||
-                           changed(triggers.right, prevTriggers.right);
-
-    if (leftChanged) {
-        std::cout << "Left Stick - X: " << leftStick.x
-                  << ", Y: " << leftStick.y
-                  << ", Magnitude: " << leftStick.magnitude << "\n";
-        prevLeftStick = leftStick;
-    }
-
-    if (rightChanged) {
-        std::cout << "Right Stick - X: " << rightStick.x
-                  << ", Y: " << rightStick.y
-                  << ", Magnitude: " << rightStick.magnitude << "\n";
-        prevRightStick = rightStick;
-    }
-
-    if (triggersChanged) {
-        std::cout << "Triggers - Left: " << triggers.left
-                  << ", Right: " << triggers.right << "\n";
-        prevTriggers = triggers;
-    }
 }

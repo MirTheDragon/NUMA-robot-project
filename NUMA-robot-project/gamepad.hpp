@@ -5,6 +5,10 @@
 #include <map>
 #include <linux/input.h>
 #include <cmath>
+#include <functional>
+#include <unordered_map>
+#include <chrono>
+
 
 struct Joystick {
     float x_raw = 0;
@@ -60,6 +64,10 @@ public:
     
     void printJoystickAndTriggerChanges();
 
+    std::unordered_map<std::string, std::function<void()>> comboCallbacks;
+
+    void registerComboCallback(const std::string& name, std::function<void()> callback);
+
 private:
     int fd = -1;
     std::string devicePath;
@@ -67,6 +75,9 @@ private:
     std::map<int, std::string> buttonMap;
     std::map<std::string, bool> buttonStates;
     std::map<std::string, bool> previousButtonStates;
+
+    int absState[ABS_CNT] = {0};
+
 
     // For tracking previous joystick/trigger values to detect change
     Joystick prevLeftStick;
@@ -83,6 +94,10 @@ private:
     std::vector<GamepadEvent> pendingEvents;
 
     void scanDevices();
+    void simulateButton(const std::string& name, const std::chrono::steady_clock::time_point& now,
+    std::unordered_map<std::string, std::chrono::steady_clock::time_point>& lastEventTimes);
+    void simulateRelease(const std::string& name, const std::chrono::steady_clock::time_point& now,
+    std::unordered_map<std::string, std::chrono::steady_clock::time_point>& lastEventTimes);
     void handleEvent(const input_event& ev);
     void updateJoysticks();
     static void squareToCircle(float x_in, float y_in, float &x_out, float &y_out);
