@@ -14,7 +14,10 @@ struct ServoConfig {
     float angleSpanDeg = 270.0f;
     float angleMinDeg = 0.0f;
     float angleMaxDeg = 270.0f;
+    
+    bool rawPwmMode = false;  // 🆕 true = interpret as raw % PWM
 
+    // Servo constructor
     ServoConfig(const std::string& n = "",
                 uint16_t pMin = 1000,
                 uint16_t pMax = 2000,
@@ -23,6 +26,18 @@ struct ServoConfig {
                 float maxA = 270.0f)
       : name(n), pulseMinUs(pMin), pulseMaxUs(pMax),
         angleSpanDeg(span), angleMinDeg(minA), angleMaxDeg(maxA) {}
+
+
+    // 🆕 Raw PWM constructor
+    ServoConfig(const std::string& n, uint16_t pwmFreqHz, float dutyCyclePercent = 1.0f)
+        : name(n), rawPwmMode(true)
+        {
+            pulseMinUs = 0;
+            pulseMaxUs = static_cast<uint16_t>(1'000'000 / pwmFreqHz);
+            angleSpanDeg = 1.0f; // unused in raw mode
+            angleMinDeg = 0.0f;
+            angleMaxDeg = 1.0f;  // unused, but prevents div/0
+        }
 };
 
 class ServoController {
@@ -51,6 +66,7 @@ public:
 
     // Set the target angle (degrees) for a servo channel, clamped internally
     int setServoAngle(size_t channel, float angleDegrees);
+    int setPwmPercent(size_t channel, float percent);
 
     // Push all servo PWM values to the hardware in one batch
     int apply();
@@ -64,6 +80,7 @@ private:
     std::array<ServoConfig, 16> servoConfigs_;
     std::array<float, 16> servoAngles_;  // current target angles per servo
     std::array<uint16_t, 16> pwmOffCounts_; // cached PWM off counts for hardware write
+    std::array<float, 16> rawPwmValues_; // duty cycles between 0.0 and 1.0
 
     uint16_t pulseWidthToCounts(uint16_t pulseWidthUs) const;
     float clampAngle(float angle, const ServoConfig& cfg) const;

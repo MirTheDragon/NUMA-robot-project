@@ -13,6 +13,7 @@ ServoController::ServoController(uint8_t i2cBus, uint8_t deviceAddress, uint16_t
 {
     servoAngles_.fill(0.0f);
     pwmOffCounts_.fill(0);
+    rawPwmValues_.fill(0.0f);
     // Initialize servo configs to defaults
     for (auto& cfg : servoConfigs_) {
         cfg = ServoConfig{};
@@ -78,6 +79,15 @@ int ServoController::setServoAngle(size_t channel, float angleDegrees) {
     return 0;
 }
 
+// setPwmPercent: set raw PWM duty cycle (0.0 to 1.0)
+int ServoController::setPwmPercent(size_t channel, float percent) {
+    if (channel >= 16) return -1;
+    if (percent < 0.0f) percent = 0.0f;
+    if (percent > 1.0f) percent = 1.0f;
+
+    rawPwmValues_[channel] = percent;
+    return 0;
+}
 
 
 // apply: compute all pulse widths and send batch
@@ -92,22 +102,31 @@ int ServoController::apply() {
 
     for (size_t i = 0; i < 16; ++i) {
         const ServoConfig& cfg = servoConfigs_[i];
-        float clampedAngle = servoAngles_[i];
 
-        float span = cfg.angleMaxDeg - cfg.angleMinDeg;
-        float ratio = (span > 0.0f)
-            ? (clampedAngle - cfg.angleMinDeg) / span
-            : 0.5f;  // default to center if zero span
 
-        // Clamp ratio to 0..1
-        if (ratio < 0.0f) ratio = 0.0f;
-        else if (ratio > 1.0f) ratio = 1.0f;
+        if (cfg.rawPwmMode) {
+            float dutyCycle = rawPwmValues_[i];
+            if (dutyCycle < 0.0f) dutyCycle = 0.0f;
+            if (dutyCycle > 1.0f) dutyCycle = 1.0f;
+            off[i] = static_cast<uint16_t>(dutyCycle * 4095);
+        } else {
+            float clampedAngle = servoAngles_[i];
 
-        uint16_t pulseWidthUs = static_cast<uint16_t>(
-            cfg.pulseMinUs + ratio * (cfg.pulseMaxUs - cfg.pulseMinUs)
-        );
+            float span = cfg.angleMaxDeg - cfg.angleMinDeg;
+            float ratio = (span > 0.0f)
+                ? (clampedAngle - cfg.angleMinDeg) / span
+                : 0.5f;  // default to center if zero span
 
-        off[i] = pulseWidthToCounts(pulseWidthUs);
+            // Clamp ratio to 0..1
+            if (ratio < 0.0f) ratio = 0.0f;
+            else if (ratio > 1.0f) ratio = 1.0f;
+
+            uint16_t pulseWidthUs = static_cast<uint16_t>(
+                cfg.pulseMinUs + ratio * (cfg.pulseMaxUs - cfg.pulseMinUs)
+            );
+
+            off[i] = pulseWidthToCounts(pulseWidthUs);
+        }
     }
 
     return PCA9685_setPWMVals(fd_, deviceAddress_, on, off);
