@@ -12,9 +12,33 @@ struct ServoMapping {
     uint8_t channelIndex;
 };
 
+struct FaceServoMapping {
+    int controllerIndex;
+    int channelIndex;
+};
+
+struct FaceOutputMappings {
+    FaceServoMapping pan;
+    FaceServoMapping tilt;
+    FaceServoMapping lightRight;
+    FaceServoMapping lightLeft;
+};
+
 class RobotController {
 public:
 
+
+    // Robot body and face configuration
+    RobotBody Body;  // Added robot body instance
+    FaceState Face;
+    FaceOutputMappings faceMappings_;
+
+    int initialize();
+    void updateKinematicsAndApply();
+
+    void bindFaceToChannels(int panCh, int tiltCh, int lightCh1, int lightCh2);
+
+    // Legs configuration
     static constexpr size_t kNumLegs = 6;
     size_t legCount_ = 6; // Number of legs, default to 6
     RobotController(int legCount);
@@ -25,14 +49,13 @@ public:
     int initialize();
     void updateAllIK();
     void updateServoAnglesFromIK();
+    void updateServoAnglesFromBodyState();
     int applyAll();
     void updateKinematicsAndApply();
 
     void setFootTarget(size_t legIndex, const Vec3& target);
     const ServoMapping& getServoMapping(size_t legIndex, size_t jointIndex);
 
-    
-    RobotBody Body;  // Added robot body instance
     std::array<ThreePointLeg, kNumLegs> legs; // Array of legs, each leg is a ThreePointLeg instance
 
     ThreePointLeg& getLeg(size_t legIndex);

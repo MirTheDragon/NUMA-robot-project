@@ -24,6 +24,37 @@ RobotController::RobotController(int legCount)
 }
 
 void RobotController::initServoMappingsAndConfigs(int legCount) {
+
+    // --- Face Pan, Tilt, and Light Configuration ---
+    faceMappings_ = {
+        .pan        = {0, 14},   // Controller 0, Channel 14
+        .tilt       = {0, 15},   // Controller 0, Channel 15
+        .lightRight = {0, 12},   // Controller 0, Channel 12
+        .lightLeft  = {0, 13}    // Controller 0, Channel 13
+    };
+
+    // Face pan: -70 to +70 degrees, rest at 0
+    Face.pan = FaceServo{ 0.f, -70.f, 70.f, 0.f, 0.f };
+
+    // Face tilt: 20 to 60 degrees, rest at +40, retract to -60
+    Face.tilt = FaceServo{ 40.f, 20.f, 60.f, 40.f, -60.f };
+
+    // Set servo configs
+    servoControllers_[0].setServoConfig(faceMappings_.pan.channelIndex,
+        ServoConfig("Face_Pan", 500, 2500, 180.f, -70.f, 70.f));
+
+    servoControllers_[0].setServoConfig(faceMappings_.tilt.channelIndex,
+        ServoConfig("Face_Tilt", 500, 2500, 180.f, -60.f, 60.f));  // supports retraction
+
+    servoControllers_[0].setServoConfig(faceMappings_.lightRight.channelIndex,
+        ServoConfig("Face_Light_R", 200, 0.0f));
+    
+    servoControllers_[0].setServoConfig(faceMappings_.lightLeft.channelIndex,
+        ServoConfig("Face_Light_L", 200, 0.0f));
+
+
+
+    // -- Leg joints configuration --
     if (legCount > 6) legCount = 6; // max legs
     if (legCount < 0) legCount = 0; // min legs
 
@@ -110,6 +141,9 @@ void RobotController::initServoMappingsAndConfigs(int legCount) {
 
 
 void RobotController::updateAllIK() {
+    // NEW: update face strobe state
+    Face.updateStrobeState();
+
     for (size_t i = 0; i < legCount_; ++i) {
         // Convert stored foot target in world coordinates to body coordinates
         Vec3 footInBody = Body.worldToLegPlaneCoords(footTargetsWorld_[i]); // you need footTargetsWorld_ to hold world targets
@@ -162,6 +196,37 @@ void RobotController::updateServoAnglesFromIK() {
     }
 }
 
+
+void RobotController::updateServoAnglesFromBodyState() {
+    // Face pan
+    if (servoControllers_[faceMappings_.pan.controllerIndex].isInitialized()) {
+        float panDeg = Face.pan.getClampedPosition();
+        servoControllers_[faceMappings_.pan.controllerIndex].setServoAngle(
+            faceMappings_.pan.channelIndex, panDeg);
+    }
+
+    // Face tilt
+    if (servoControllers_[faceMappings_.tilt.controllerIndex].isInitialized()) {
+        float tiltDeg = Face.tilt.getClampedPosition();
+        servoControllers_[faceMappings_.tilt.controllerIndex].setServoAngle(
+            faceMappings_.tilt.channelIndex, tiltDeg);
+    }
+
+    // Face light — only active when face is retracted
+    float brightness = Face.getLightOutput();
+
+    if (servoControllers_[faceMappings_.lightLeft.controllerIndex].isInitialized()) {
+        servoControllers_[faceMappings_.lightLeft.controllerIndex].setPwmPercent(
+            faceMappings_.lightLeft.channelIndex, brightness);
+    }
+
+    if (servoControllers_[faceMappings_.lightRight.controllerIndex].isInitialized()) {
+        servoControllers_[faceMappings_.lightRight.controllerIndex].setPwmPercent(
+            faceMappings_.lightRight.channelIndex, brightness);
+    }
+}
+
+
 int RobotController::applyAll() {
     int overallStatus = 0;
     for (size_t i = 0; i < servoControllers_.size(); ++i) {
@@ -180,8 +245,9 @@ void RobotController::updateKinematicsAndApply() {
     // Update all inverse kinematics based on current foot targets and body pose
     updateAllIK();
 
-    // Update servo angles based on IK results
-    updateServoAnglesFromIK();
+    
+    updateServoAnglesFromIK(); // Update servo angles based on IK results
+    updateServoAnglesFromBodyState();   // Apply face servos and lights
 
     // Apply servo angles to hardware (send I2C commands)
     int ret = applyAll();
@@ -238,4 +304,3 @@ void RobotController::setFootTarget(size_t legIndex, const Vec3& target) {
 const ServoMapping& RobotController::getServoMapping(size_t legIndex, size_t jointIndex) const {
     return servoMappings_[legIndex][jointIndex];
 }
-
