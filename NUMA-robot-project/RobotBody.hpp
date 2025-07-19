@@ -36,7 +36,7 @@ struct FaceServo {
 
 struct FaceState {
     FaceServo pan = { 0.f, -70.f, 70.f, 0.f, 0.f };
-    FaceServo tilt = { 40.f, 20.f, 60.f, 40.f, -60.f };
+    FaceServo tilt = { 40.f, 10.f, 70.f, 40.f, -70.f };
 
     LightMode lightMode = LightMode::Off;
     float lightBrightness = 1.0f;   // base brightness (0–1)
@@ -54,7 +54,7 @@ struct FaceState {
         return isRetracted() && lightMode != LightMode::Off && lightBrightness > 0.f;
     }
 
-        // Final computed output brightness (0–1)
+    // Final computed output brightness (0–1)
     float getLightOutput() const {
         if (!lightShouldBeOn()) return 0.0f;
 
@@ -71,8 +71,9 @@ struct FaceState {
     void updateStrobeState() {
         if (lightMode != LightMode::Strobe || !isRetracted()) return;
 
-        const int strobeRateHz = 12;
-        const int intervalMs = 1000 / (strobeRateHz * 2); // toggle half-cycle
+        const int strobeRateHz = 15;
+        const int strobeDuty = 0.15;
+        const int intervalMs = 1000 / strobeRateHz * strobeDuty;
 
         auto now = std::chrono::steady_clock::now();
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastToggle).count();
@@ -97,12 +98,28 @@ public:
 
 
     Vec3 position = {0.f, 0.f, originStartingHeight};
+    
+    // Heading (yaw)
+    float headingDeg = 0.f;
+    float targetHeadingDeg = 0.f;
+
+    // Tilt
     float tiltAzimuthDeg = 0.f;
     float tiltPolarDeg = 0.f;
-    float headingDeg = 0.f;
+    float targetTiltAzimuthDeg = 0.f;
+    float targetTiltPolarDeg   = 0.f;
+
+    // Limits
+    float maxHeadingVelocityDegPerSec = 30.f;
+    float maxTiltVelocityDegPerSec = 30.f;
+
+    // Timing
+    std::chrono::steady_clock::time_point lastUpdate = std::chrono::steady_clock::now();
+
 
     Vec3 worldToBodyCoords(const Vec3& worldPos) const;
     Vec3 worldToLegPlaneCoords(const Vec3& footWorld) const;
+    void updateSmoothedPose();
 
     RobotBody() = default;
 };

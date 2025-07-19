@@ -209,7 +209,6 @@ void RobotController::updateServoAnglesFromBodyState() {
     // Face pan
     if (servoControllers_[faceMappings_.pan.controllerIndex].isInitialized()) {
         float panDeg = Face.pan.getClampedPosition();
-        std::cout << "[DEBUG] Setting Face Pan to " << panDeg << " deg\n";
         servoControllers_[faceMappings_.pan.controllerIndex].setServoAngle(
             faceMappings_.pan.channelIndex, panDeg);
     }
@@ -217,26 +216,20 @@ void RobotController::updateServoAnglesFromBodyState() {
     // Face tilt
     if (servoControllers_[faceMappings_.tilt.controllerIndex].isInitialized()) {
         float tiltDeg = Face.tilt.getClampedPosition();
-        std::cout << "[DEBUG] Setting Face Tilt to " << tiltDeg << " deg\n";
+        if ( Face.tilt.isRetracted) tiltDeg = Face.tilt.retractDeg;
         servoControllers_[faceMappings_.tilt.controllerIndex].setServoAngle(
             faceMappings_.tilt.channelIndex, tiltDeg);
     }
 
     // Face light — only active when face is retracted
     float brightness = Face.getLightOutput();
-    std::cout << "[DEBUG] Light brightness = " << brightness << " ("
-              << (Face.isRetracted() ? "retracted" : "not retracted") << ", "
-              << (Face.lightMode == LightMode::Off ? "Off" :
-                  Face.lightMode == LightMode::Steady ? "Steady" : "Strobe") << ")\n";
 
     if (servoControllers_[faceMappings_.lightLeft.controllerIndex].isInitialized()) {
-        std::cout << "[DEBUG] Setting Left Light PWM to " << brightness * 100 << "%\n";
         servoControllers_[faceMappings_.lightLeft.controllerIndex].setPwmPercent(
             faceMappings_.lightLeft.channelIndex, brightness);
     }
 
     if (servoControllers_[faceMappings_.lightRight.controllerIndex].isInitialized()) {
-        std::cout << "[DEBUG] Setting Right Light PWM to " << brightness * 100 << "%\n";
         servoControllers_[faceMappings_.lightRight.controllerIndex].setPwmPercent(
             faceMappings_.lightRight.channelIndex, brightness);
     }
@@ -259,10 +252,12 @@ int RobotController::applyAll() {
 
 
 void RobotController::updateKinematicsAndApply() {
+    // ✅ Smooth orientation first
+    Body.updateSmoothedPose();
+
+
     // Update all inverse kinematics based on current foot targets and body pose
     updateAllIK();
-
-    
     updateServoAnglesFromIK(); // Update servo angles based on IK results
     updateServoAnglesFromBodyState();   // Apply face servos and lights
 

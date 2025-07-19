@@ -61,6 +61,7 @@ Vec3 RobotBody::worldToBodyCoords(const Vec3& footWorld) const
     return p;
 }
 
+
 Vec3 RobotBody::worldToLegPlaneCoords(const Vec3& footWorld) const {
     // Convert world position to body coordinates first
     Vec3 bodyCoords = worldToBodyCoords(footWorld);
@@ -69,5 +70,32 @@ Vec3 RobotBody::worldToLegPlaneCoords(const Vec3& footWorld) const {
     bodyCoords.z -= legPlaneFromOrigin;  // legHipPlaneFromOrigin is in cm
 
     return bodyCoords;
+}
+
+void RobotBody::updateSmoothedPose() {
+    auto now = std::chrono::steady_clock::now();
+    float dt = std::chrono::duration<float>(now - lastUpdate).count();
+    lastUpdate = now;
+
+    auto smooth = [](float current, float target, float maxRate, float dt) -> float {
+        float delta = target - current;
+
+        // Wrap angles cleanly
+        while (delta > 180.f) delta -= 360.f;
+        while (delta < -180.f) delta += 360.f;
+
+        float maxStep = maxRate * dt;
+        if (delta > maxStep) delta = maxStep;
+        else if (delta < -maxStep) delta = -maxStep;
+
+        float result = current + delta;
+        if (result > 180.f) result -= 360.f;
+        if (result < -180.f) result += 360.f;
+        return result;
+    };
+
+    headingDeg = smooth(headingDeg, targetHeadingDeg, maxHeadingVelocityDegPerSec, dt);
+    tiltAzimuthDeg = smooth(tiltAzimuthDeg, targetTiltAzimuthDeg, maxTiltVelocityDegPerSec, dt);
+    tiltPolarDeg   = smooth(tiltPolarDeg, targetTiltPolarDeg, maxTiltVelocityDegPerSec, dt);
 }
 

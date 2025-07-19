@@ -60,6 +60,18 @@ void ikThread(RobotController& robot) {
     while (running) {
         auto start = std::chrono::steady_clock::now();
 
+
+        // Body orientation
+        // Set robot heading to max ±30° scaled by left stick X
+        robot.Body.targetHeadingDeg = -sharedState.rightStick.x_raw * 30.0f;
+        robot.Body.targetTiltAzimuthDeg = 90.0f;
+        robot.Body.targetTiltPolarDeg   = -sharedState.rightStick.y_raw * 30.0f;
+
+        // Set face pan to ±60° scaled by right stick X
+        robot.Face.pan.value = robot.Face.pan.restDeg - sharedState.rightStick.x_raw * 70.0f;
+        // Set face tilt to ±20° scaled by right stick Y (invert Y if natural)
+        robot.Face.tilt.value = robot.Face.tilt.restDeg + sharedState.rightStick.y_raw * 30.0f;
+
         // Lock joystick state copy for thread safety
         Vec2 joystickCopy;
         {
