@@ -16,7 +16,7 @@
 #include <algorithm>
 
 static constexpr float EPSILON = 0.01f;             
-static constexpr int DEBOUNCE_MS = 75;              // Button debounce ms
+static constexpr int DEBOUNCE_MS = 50;              // Button debounce ms
 static constexpr float JOYSTICK_DEADZONE = 0.02f;   // 2% deadzone
 
 
@@ -89,8 +89,8 @@ void GamepadController::scanDevices() {
 
     buttonMap[304] = "A";
     buttonMap[305] = "B";
-    buttonMap[307] = "Y";
-    buttonMap[308] = "X";
+    buttonMap[307] = "X";
+    buttonMap[308] = "Y";
     buttonMap[310] = "LB";
     buttonMap[311] = "RB";
     buttonMap[314] = "Minus";
@@ -160,29 +160,48 @@ void GamepadController::update(GamepadState &state) {
                 int prevVal = buttonStates[name];
                 auto now = std::chrono::steady_clock::now();
                 auto &lastTime = lastEventTimes[name];
+
                 if (val != prevVal && (now - lastTime) >= std::chrono::milliseconds(DEBOUNCE_MS)) {
                     buttonStates[name] = val;
                     lastTime = now;
+
                     if (val == 1) {
-                        bool triggered = false;
-                        for (const auto& [held, state] : buttonStates) {
-                            if (state == 1 && held != name) {
-                                std::string combo = held + "+" + name;
-                                pendingEvents.push_back({"combo", combo});
-                                triggered = true;
+                        // Pressed
+                        pressStartTime[name] = now;
+                        invalidClick[name] = false;
+
+                        // Invalidate other clicks in progress
+                        for (auto& [other, state] : buttonStates) {
+                            if (other != name && state == 1) {
+                                invalidClick[name] = true;
+                                invalidClick[other] = true;
                             }
                         }
-                        if (!triggered)
-                            pendingEvents.push_back({"button", name, "pressed"});
+
+                        // Queue normal press event
+                        pendingEvents.push_back({"button", name, "pressed"});
                         recentInputs.push_back(name);
                         if (recentInputs.size() > 10) recentInputs.erase(recentInputs.begin());
+
                     } else if (val == 0) {
-                        pendingEvents.push_back({"button", name, "released"});
+                        bool wasCleanClick = !invalidClick[name];
+                        if (wasCleanClick) {
+                            pendingEvents.push_back({"click", name});
+                        }
+
+                        // Combo detection: was any other button held at this moment?
+                        for (const auto& [other, held] : buttonStates) {
+                            if (other != name && held == 1) {
+                                std::string comboName = other + "+" + name;
+                                pendingEvents.push_back({"combo", comboName});
+                            }
+                        }
+
                     }
                 }
             }
         } else {
-            handleEvent(ev);
+            handleEvent(ev);  // ABS events (D-pad, joystick, triggers)
         }
     }
 
@@ -194,8 +213,9 @@ void GamepadController::update(GamepadState &state) {
     }
 
     updateJoysticks();
-    detectCombos();
+    //detectCombos();  // This uses recentInputs, no timing limit
 
+    // Populate GamepadState
     state.buttonEvents.clear();
     for (const auto& [name, val] : buttonStates) {
         if (val == 1) state.buttonEvents[name] = ButtonEvent::Pressed;
@@ -205,6 +225,7 @@ void GamepadController::update(GamepadState &state) {
     state.rightStick = rightStick;
     state.triggers = triggers;
 }
+
 
 void GamepadController::printJoystickAndTriggerChanges() {
     // Calculate magnitude and angle for left stick
@@ -259,45 +280,96 @@ void GamepadController::addCombo(const std::string& hold, const std::vector<std:
     activeCombos[name].insert(activeCombos[name].end(), sequence.begin(), sequence.end());
 }
 
-void GamepadController::detectCombos() {
-    for (const auto& pair : activeCombos) {
-        const auto& name = pair.first;
-        const auto& seq = pair.second;
-        if (!buttonStates[seq[0]]) continue;
-        if (recentInputs.size() < seq.size() - 1) continue;
-        bool match = true;
-        for (size_t i = 1; i < seq.size(); ++i) {
-            if (recentInputs[recentInputs.size() - seq.size() + i] != seq[i]) {
-                match = false;
-                break;
+void GamepadController::detectCombosAndClicks() {
+    std::unordered_map<std::string, bool> pressed;
+    std::unordered_map<std::string, std::chrono::steady_clock::time_point> pressTime;
+
+    for (const auto& ev : eventHistory) {
+        if (ev.type == "pressed") {
+            pressed[ev.name] = true;
+            pressTime[ev.name] = ev.time;
+        } else if (ev.type == "released" && pressed[ev.name]) {
+            // Look for "clean" click: no other button between press/release
+            bool clean = true;
+            for (const auto& between : eventHistory) {
+                if (between.time > pressTime[ev.name] && between.time < ev.time &&
+                    between.name != ev.name) {
+                    clean = false;
+                    break;
+                }
             }
-        }
-        if (match) {
-            pendingEvents.push_back({"combo", name});
-            recentInputs.clear();
+
+            if (clean) {
+                pendingEvents.push_back({"click", ev.name});
+                // Also check for combos: is someone else held down now?
+                for (const auto& [btn, state] : buttonStates) {
+                    if (state == 1 && btn != ev.name) {
+                        pendingEvents.push_back({"combo", btn + "+" + ev.name});
+                    }
+                }
+            }
+
+            pressed[ev.name] = false;
         }
     }
+
+    eventHistory.clear();  // Clear after processing
 }
 
-void GamepadController::simulateButton(const std::string& name, const std::chrono::steady_clock::time_point& now,
-    std::unordered_map<std::string, std::chrono::steady_clock::time_point>& lastEventTimes) {
+
+void GamepadController::simulateButton(const std::string& name,
+    const std::chrono::steady_clock::time_point& now,
+    std::unordered_map<std::string, std::chrono::steady_clock::time_point>& lastEventTimes)
+{
     if (buttonStates[name] != 1 && (now - lastEventTimes[name]) >= std::chrono::milliseconds(DEBOUNCE_MS)) {
         buttonStates[name] = 1;
         lastEventTimes[name] = now;
+
+        // Simulate press
         pendingEvents.push_back({"button", name, "pressed"});
+
+        // Add to recent input buffer
         recentInputs.push_back(name);
         if (recentInputs.size() > 10) recentInputs.erase(recentInputs.begin());
+
+        // Mark this as a potential clean click start (assume clean unless interrupted)
+        pressStartTime[name] = now;
+        invalidClick[name] = false;
+
+        // Invalidate any other concurrent presses
+        for (auto& [other, state] : buttonStates) {
+            if (other != name && state == 1) {
+                invalidClick[name] = true;
+                invalidClick[other] = true;
+            }
+        }
     }
 }
 
-void GamepadController::simulateRelease(const std::string& name, const std::chrono::steady_clock::time_point& now,
-    std::unordered_map<std::string, std::chrono::steady_clock::time_point>& lastEventTimes) {
+
+
+void GamepadController::simulateRelease(const std::string& name,
+    const std::chrono::steady_clock::time_point& now,
+    std::unordered_map<std::string, std::chrono::steady_clock::time_point>& lastEventTimes)
+{
     if (buttonStates[name] == 1 && (now - lastEventTimes[name]) >= std::chrono::milliseconds(DEBOUNCE_MS)) {
         buttonStates[name] = 0;
         lastEventTimes[name] = now;
         pendingEvents.push_back({"button", name, "released"});
+
+        // Simple click logic — assumes D-pad clicks are clean
+        pendingEvents.push_back({"click", name});
+
+        // Detect combos with other currently held buttons
+        for (const auto& [other, held] : buttonStates) {
+            if (other != name && held == 1) {
+                std::string comboName = other + "+" + name;
+                pendingEvents.push_back({"combo", comboName});
+            }
+        }
     }
 }
+
 
 
 void GamepadController::handleEvent(const input_event& ev) {
@@ -355,9 +427,9 @@ void GamepadController::updateJoysticks() {
 
     // Normalize and store raw stick input
     leftStick.x_raw = normalizeAxis(absState[ABS_X]);
-    leftStick.y_raw = normalizeAxis(absState[ABS_Y]);
+    leftStick.y_raw = -normalizeAxis(absState[ABS_Y]);     // ← invert Y
     rightStick.x_raw = normalizeAxis(absState[ABS_RX]);
-    rightStick.y_raw = normalizeAxis(absState[ABS_RY]);
+    rightStick.y_raw = -normalizeAxis(absState[ABS_RY]);     // ← invert Y
 
     // Convert square to circular mapping
     squareToCircle(leftStick.x_raw, leftStick.y_raw, leftStick.x, leftStick.y);

@@ -8,7 +8,14 @@
 #include <functional>
 #include <unordered_map>
 #include <chrono>
+#include <deque>
 
+
+struct TimedEvent {
+    std::string name;
+    std::string type;  // "pressed" or "released"
+    std::chrono::steady_clock::time_point time;
+};
 
 struct Joystick {
     float x_raw = 0;
@@ -57,7 +64,6 @@ public:
     bool initialize(const std::vector<ComboEvent>& combos = {});
     bool isConnected() const;
     void update(GamepadState& state);
-    bool pollCombo(std::string& outEventName);
     void addCombo(const std::string& holdButton, const std::vector<std::string>& sequence, const std::string& eventName);
     bool isButtonPressed(const std::string& name) const;
     std::vector<GamepadEvent> pollEvents();
@@ -76,7 +82,13 @@ private:
     std::map<std::string, bool> buttonStates;
     std::map<std::string, bool> previousButtonStates;
 
+    std::deque<TimedEvent> eventHistory;
+
+
     int absState[ABS_CNT] = {0};
+    std::unordered_map<std::string, std::chrono::steady_clock::time_point> pressStartTime;
+    std::unordered_map<std::string, bool> invalidClick;
+
 
 
     // For tracking previous joystick/trigger values to detect change
@@ -102,5 +114,5 @@ private:
     void updateJoysticks();
     static void squareToCircle(float x_in, float y_in, float &x_out, float &y_out);
 
-    void detectCombos();
+    void detectCombosAndClicks();
 };

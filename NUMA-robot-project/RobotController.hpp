@@ -33,9 +33,6 @@ public:
     FaceState Face;
     FaceOutputMappings faceMappings_;
 
-    int initialize();
-    void updateKinematicsAndApply();
-
     void bindFaceToChannels(int panCh, int tiltCh, int lightCh1, int lightCh2);
 
     // Legs configuration

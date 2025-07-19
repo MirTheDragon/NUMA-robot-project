@@ -415,13 +415,14 @@ void PathPlanner::updateFootStateTransitionsByGroup() {
         currentWalkCycle_->lastLiftedGroupIndex_ = liftGroupIndex;
         const auto& group = currentWalkCycle_->getLegGroups()[liftGroupIndex];
         //std::cout << "[Lift] Lifting group " << liftGroupIndex << " legs: ";
+        
         for (size_t legIndex : group) {
-            std::cout << legIndex << " ";
+            // std::cout << legIndex << " ";
             FootStatusInternal& foot = footStatuses_[legIndex];
             foot.state = FootState::Lifted;
             foot.stepProgress = 0.f;
         }
-        std::cout << std::endl;
+        // std::cout << std::endl;
     } else {
         // If no group is ready to lift, just return
         return;

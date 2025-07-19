@@ -100,7 +100,14 @@ int main() {
 
     std::cout << "GamepadController created." << std::endl;
 
-    if (!pad.initialize({})) {
+    std::vector<ComboEvent> comboDefs = {
+        {"Y", {"Up"}, "Y+Up"},
+        {"Y", {"Down"}, "Y+Down"},
+        {"Y", {"Left"}, "Y+Left"},
+        {"Y", {"Right"}, "Y+Right"}
+    };
+
+    if (!pad.initialize(comboDefs)) {
         std::cerr << "Warning: Gamepad not detected!\n";
     } else {
         std::cout << "Gamepad initialized successfully.\n";
@@ -143,15 +150,62 @@ int main() {
             while (!gamepadEventQueue.empty()) {
                 const auto& ev = gamepadEventQueue.front();
 
-                if (ev.type == "button" && ev.name == "Y" && ev.action == "pressed") {
+                // Walkcycle mode cycler on X click
+                if (ev.type == "click" && ev.name == "X") {
                     currentWalkCycleIndex = (currentWalkCycleIndex + 1) % walkCycles.size();
                     pathPlanner->requestWalkCycleSwitch(walkCycles[currentWalkCycleIndex]);
                     std::cout << "Switched to walk cycle index: " << currentWalkCycleIndex << std::endl;
                 }
 
+                // Toggle light on/off with Y click
+                if (ev.type == "click" && ev.name == "Y") {
+                    if (robot.Face.lightMode == LightMode::Off) {
+                        robot.Face.lightMode = LightMode::Steady;
+                        std::cout << "[Light] Turned ON (Steady mode)\n";
+                    } else {
+                        robot.Face.lightMode = LightMode::Off;
+                        std::cout << "[Light] Turned OFF\n";
+                    }
+                }
+
+                // Combo: Y + Up → increase brightness
+                if (ev.type == "combo" && ev.name == "Y+Up") {
+                    robot.Face.lightBrightness += 0.2f;
+                    if (robot.Face.lightBrightness > 1.0f) robot.Face.lightBrightness = 0.0f;
+                    std::cout << "[Light] Brightness increased to "
+                            << static_cast<int>(robot.Face.lightBrightness * 100) << "%\n";
+                }
+
+                // Combo: Y + Down → decrease brightness
+                if (ev.type == "combo" && ev.name == "Y+Down") {
+                    robot.Face.lightBrightness -= 0.2f;
+                    if (robot.Face.lightBrightness < 0.0f) robot.Face.lightBrightness = 1.0f;
+                    std::cout << "[Light] Brightness decreased to "
+                            << static_cast<int>(robot.Face.lightBrightness * 100) << "%\n";
+                }
+
+                // Combo: Y + Left → toggle strobe
+                if (ev.type == "combo" && ev.name == "Y+Left") {
+                    if (robot.Face.lightMode == LightMode::Steady) {
+                        robot.Face.lightMode = LightMode::Strobe;
+                        std::cout << "[Light] Switched to STROBE mode\n";
+                    } else if (robot.Face.lightMode == LightMode::Strobe) {
+                        robot.Face.lightMode = LightMode::Steady;
+                        std::cout << "[Light] Switched to STEADY mode\n";
+                    }
+                }
+
+                // Combo: Y + Right → reset
+                if (ev.type == "combo" && ev.name == "Y+Right") {
+                    robot.Face.lightBrightness = 0.0f;
+                    robot.Face.lightMode = LightMode::Steady;
+                    std::cout << "[Light] Reset brightness to 0%, mode to STEADY\n";
+                }
+
                 gamepadEventQueue.pop();
             }
         }
+
 
         // Drawing at ~30 Hz
         auto now = std::chrono::steady_clock::now();

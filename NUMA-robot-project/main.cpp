@@ -25,7 +25,15 @@ int main() {
     GamepadState state;
     std::cout << "GamepadController created.\n";
 
-    if (!pad.initialize({})) {
+
+    std::vector<ComboEvent> combos = {
+        {"A", {"Left"}, "A+Left"},
+        {"B", {"Down"}, "B+Down"},
+        {"X", {"Up"}, "X+Up"},
+        {"Y", {"Right"}, "Y+Right"}
+    };
+
+    if (!pad.initialize(combos)) {
         std::cerr << "⚠️ No controller found at startup.\n";
     }
 
@@ -48,13 +56,23 @@ int main() {
         pad.update(state);
         pad.printJoystickAndTriggerChanges();
 
-        // Get all button or combo events
+        // Get only click and combo events
         auto events = pad.pollEvents();
         for (const auto& ev : events) {
-            if (ev.type == "button") {
-                std::cout << "🔘 Button " << ev.name << " " << ev.action << "\n";
+            if (ev.type == "combo") {
+                std::cout << "🎯 Combo detected: " << ev.name << "\n";
 
-                if (ev.name == "Minus" && ev.action == "pressed") {
+                // Handle by name
+                if (ev.name == "A+Left") std::cout << "👈 A+Left triggered!\n";
+                else if (ev.name == "B+Down") std::cout << "👇 B+Down triggered!\n";
+                else if (ev.name == "X+Up") std::cout << "☝️ X+Up triggered!\n";
+                else if (ev.name == "Y+Right") std::cout << "👉 Y+Right triggered!\n";
+            }
+
+            else if (ev.type == "click") {
+                std::cout << "✅ Click: " << ev.name << "\n";
+
+                if (ev.name == "Minus") {
                     faceVisible = !faceVisible;
                     std::cout << (faceVisible ? "🟢 Showing face\n" : "⚫ Hiding face\n");
                     if (faceVisible) {
@@ -64,20 +82,10 @@ int main() {
                     }
                 }
 
-                // Add logic for button presses here
+                // Add logic for other click actions here
             }
 
-            else if (ev.type == "combo") {
-                std::cout << "🎯 Combo detected: " << ev.name << "\n";
-
-                // Handle by name
-                if (ev.name == "A+Left") std::cout << "👈 A+Left triggered!\n";
-                else if (ev.name == "B+Down") std::cout << "👇 B+Down triggered!\n";
-                else if (ev.name == "X+Up") std::cout << "☝️ X+Up triggered!\n";
-                else if (ev.name == "Y+Right") std::cout << "👉 Y+Right triggered!\n";
-
-                // Add other combos here easily
-            }
+        // Button presses/releases are ignored here
         }
 
         if (faceVisible) updateAndDrawEyes();
