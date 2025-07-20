@@ -37,7 +37,7 @@ void RobotController::initServoMappingsAndConfigs(int legCount) {
     Face.pan = FaceServo{ 0.f, -70.f, 70.f, 0.f, 0.f };
 
     // Face tilt: 20 to 60 degrees, rest at +40, retract to -60
-    Face.tilt = FaceServo{ 40.f, 20.f, 60.f, 40.f, -60.f };
+    Face.tilt = FaceServo{ 20.f, -20.f, 60.f, 20.f, -60.f };
 
     // Set servo configs
     servoControllers_[0].setServoConfig(faceMappings_.pan.channelIndex,

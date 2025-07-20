@@ -71,8 +71,8 @@ struct FaceState {
     void updateStrobeState() {
         if (lightMode != LightMode::Strobe || !isRetracted()) return;
 
-        const int strobeRateHz = 15;
-        const int strobeDuty = 0.15;
+        const int strobeRateHz = 10;
+        const int strobeDuty = 0.30;
         const int intervalMs = 1000 / strobeRateHz * strobeDuty;
 
         auto now = std::chrono::steady_clock::now();

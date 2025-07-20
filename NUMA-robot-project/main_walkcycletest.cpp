@@ -54,7 +54,7 @@ void gamepadPollingThread() {
 }
 
 void ikThread(RobotController& robot) {
-    const int ikLoopHz = 120;
+    const int ikLoopHz = 60;
     const auto ikLoopInterval = std::chrono::milliseconds(1000 / ikLoopHz);
 
     while (running) {
