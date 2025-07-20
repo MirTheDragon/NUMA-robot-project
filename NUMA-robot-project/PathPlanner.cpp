@@ -13,9 +13,9 @@ PathPlanner::PathPlanner(RobotController& robot)
     }
 
     // Initialize your walk cycles somewhere (or inject them)
-    static WalkCycle walkCycle3Set({ {0, 2, 4}, {1, 3, 5} }, 1.f, 1.0f);
-    static WalkCycle walkCycle2Set({ {0, 3}, {1, 4}, {2, 5} }, 3.f, 0.5f);
-    static WalkCycle walkCycle1Set({ {0}, {1}, {2}, {3}, {4}, {5} }, 6.f, 0.2f);
+    static WalkCycle walkCycle3Set({ {0, 2, 4}, {1, 3, 5} }, 1.f, 2.0f, 1.0f);
+    static WalkCycle walkCycle2Set({ {0, 3}, {1, 4}, {2, 5} }, 3.f, 2.0f, 0.5f);
+    static WalkCycle walkCycle1Set({ {0}, {1}, {2}, {3}, {4}, {5} }, 6.f, 3.0f, 0.2f);
 
     // Set a default walk cycle
     currentWalkCycle_ = &walkCycle3Set;
@@ -54,13 +54,14 @@ void PathPlanner::update(const Vec2& joystickInput, float deltaTimeSeconds) {
 
 
     // Update step centers based on leg angle and robot heading (XY only)
-    float headingRad = robot_.Body.headingDeg * M_PI / 180.f;
+    // float headingRad = robot_.Body.headingDeg * M_PI / 180.f;
+    float headingRad = 0; // Added for stabilized heading, condition for updating heading
     for (size_t i = 0; i < robot_.legCount_; ++i) {
         updateStepAreaCenter(i, headingRad);
     }
 
     // Update desired foot XY targets based on joystick input
-    updateStepAreaTargets(joystickInput, deltaTimeSeconds);
+    updateStepAreaTargets(joystickInput);
 
     // Update foot states and progress
     stepPathLogic(joystickInput, deltaTimeSeconds);
@@ -97,7 +98,7 @@ void PathPlanner::updateStepAreaCenter(size_t legIndex, float headingRad) {
     footStatuses_[legIndex].stepAreaCenter = rotatedVec;
 }
 
-void PathPlanner::updateStepAreaTargets(const Vec2& joystickInput, float headingRad) {
+void PathPlanner::updateStepAreaTargets(const Vec2& joystickInput) {
     if (joystickInput.x == 0.f && joystickInput.y == 0.f) {
         // No input, all targets reset to zero offset
         for (size_t i = 0; i < robot_.legCount_; ++i) {
@@ -108,7 +109,7 @@ void PathPlanner::updateStepAreaTargets(const Vec2& joystickInput, float heading
 
     // Calculate input angle once
     float inputAngle = std::atan2(joystickInput.y, joystickInput.x);
-    float totalAngle = inputAngle + headingRad;
+    float totalAngle = inputAngle;
 
     // Rotate a unit vector (stepRadius_ along X axis) by totalAngle
     Vec2 direction = rotateZ(Vec2{stepAreaRadius_, 0.f}, totalAngle * (180.f / M_PI));
@@ -186,7 +187,7 @@ void PathPlanner::stepPathLogic(const Vec2& joystickInput, float dt) {
 
 
     // Update step area centers based on leg angle and robot heading
-    updateStepAreaTargets(joystickInput, robot_.Body.headingDeg * M_PI / 180.f);
+    updateStepAreaTargets(joystickInput);
     updateSynchronizedStepAreaTargets();
     
     // Compute distance to back edge for each group using currentWalkCycle_
@@ -307,18 +308,29 @@ void PathPlanner::stepPathLogic(const Vec2& joystickInput, float dt) {
         }
     }
 
-    if (!returnToZeroRequested_){
-        for (size_t i = 0; i < robot_.legCount_; ++i) {
-            FootStatusInternal& foot = footStatuses_[i];
+    for (size_t i = 0; i < robot_.legCount_; ++i) {
+        FootStatusInternal& foot = footStatuses_[i];
 
-            if (foot.state == FootState::Grounded) {
-                // Move desired target opposite to move direction at normal speed
-                foot.stepProgress = 0.f; // Reset step progress for grounded feet
-                foot.desiredTarget.x -= moveIncrement.x * speedReductionFactor;
-                foot.desiredTarget.y -= moveIncrement.y * speedReductionFactor;
-            } 
+        if (foot.state == FootState::Grounded) {
+            // Move desired target opposite to move direction at normal speed
+            foot.stepProgress = 0.f; // Reset step progress for grounded feet
+            foot.desiredTarget.x -= moveIncrement.x * speedReductionFactor;
+            foot.desiredTarget.y -= moveIncrement.y * speedReductionFactor;
+
+            // Clamp desired target to remain within 120% of step circle radius
+            Vec2 center = foot.stepAreaCenter;
+            Vec2 desiredXY{foot.desiredTarget.x, foot.desiredTarget.y};
+            Vec2 toDesired = desiredXY - center;
+
+            float maxRadius = stepAreaRadius_ * 1.2f;
+            if (toDesired.length() > maxRadius) {
+                Vec2 clamped = center + toDesired.normalized() * maxRadius;
+                foot.desiredTarget.x = clamped.x;
+                foot.desiredTarget.y = clamped.y;
+            }
         }
     }
+
     computeFootHeights(dt, joystickInput);  // Update foot heights based on step progress
 
 }
@@ -331,6 +343,7 @@ void PathPlanner::updateFootStateTransitionsByGroup() {
 
     bool anyGroupLifted = false;
 
+    // Step 0.8: Ground groups returning to zero
     // Check if legs returning to center are ready to ground
     if (returnToZeroRequested_) {
         for (size_t groupIndex = 0; groupIndex < legGroups.size(); ++groupIndex) {
@@ -341,11 +354,14 @@ void PathPlanner::updateFootStateTransitionsByGroup() {
             for (size_t legIndex : group) {
                 const FootStatusInternal& foot = footStatuses_[legIndex];
                 if (foot.state == FootState::Lifted) {
+                    
+                    anyGroupLifted = true;
+
                     groupIsLifted = true;
                     Vec2 pos{foot.currentPosition.x, foot.currentPosition.y};
                     Vec2 center = foot.stepAreaCenter;
                     float dist = (pos - center).length();
-                    if (dist > (stepAreaRadius_ * 0.05f)) {
+                    if (dist > (stepAreaRadius_ * 0.1f)) {
                         allWithinCenterThreshold = false;
                         break;
                     }
@@ -394,7 +410,7 @@ void PathPlanner::updateFootStateTransitionsByGroup() {
                 // Check if overshot: dot product < 0 means went past target
                 float dot = toTarget.x * stepDir.x + toTarget.y * stepDir.y;
 
-                if (distToTarget < threshold * threshold || dot < 0.f) {
+                if (distToTarget < threshold || dot < 0.1f) {
                     anyLiftedLegReadyToGround = true;
                     break;  // One leg ready is enough
                 }
@@ -428,6 +444,20 @@ void PathPlanner::updateFootStateTransitionsByGroup() {
     bool liftDueToEdge = false;
     bool liftDueToSyncedStep = false;
 
+    
+    if (returnToZeroRequested_) {
+        int resetGroup = pickNextResetGroup();
+        if (resetGroup == -1) {
+            std::cout << "[ReturnToZero] Completed return-to-zero, resuming normal walk\n";
+            requestReturnToZero(false);
+            return;
+        } else {
+            liftNextGroup = true;
+            currentWalkCycle_->optimalLiftedGroupIndex_ = resetGroup;
+        }
+    } else {
+
+    
     // Step 4: Select the next group to lift based on distance to back edge
     selectNextGroupToLift();
 
@@ -493,18 +523,10 @@ void PathPlanner::updateFootStateTransitionsByGroup() {
         }
     }
 
+    }
+
     if (liftNextGroup) {
         size_t liftGroupIndex = currentWalkCycle_->optimalLiftedGroupIndex_;  // or minDistToBackGroupIndex_
-
-        if (returnToZeroRequested_) {
-            int resetGroup = pickNextResetGroup();
-            //std::cout << "[ReturnToZero] pickNextResetGroup() returned " << resetGroup << "\n";
-            if (resetGroup == -1) {
-                // All legs are already reset — no lift needed
-                return;
-            }
-            liftGroupIndex = resetGroup;
-        }
 
         currentWalkCycle_->lastLiftedGroupIndex_ = liftGroupIndex;
         const auto& group = currentWalkCycle_->getLegGroups()[liftGroupIndex];

@@ -132,7 +132,7 @@ private:
     void updateStepAreaCenter(size_t legIndex, float headingRad);
 
     // Update desired foot targets constrained within step area, driven by joystick input
-    void updateStepAreaTargets(const Vec2& joystickInput, float headingRad);
+    void updateStepAreaTargets(const Vec2& joystickInput);
     void updateFootTargets(const Vec2& joystickInput, float dt);
 
     // Update foot states and compute stepProgress and foot height smoothly:
@@ -167,9 +167,10 @@ private:
 
 class WalkCycle {
 public:
-    WalkCycle(std::vector<std::vector<size_t>> groups, float liftedSpeedMultiplier,  float fractionAhead = 0.5f)
+    WalkCycle(std::vector<std::vector<size_t>> groups, float liftedSpeedMultiplier,  float fractionAhead = 0.5f, float positionThreshold = 1.0f)
         : legGroups_(std::move(groups)),
           liftedSpeedMultiplier_(liftedSpeedMultiplier),
+          positionThreshold_(positionThreshold),
           fractionAhead_(fractionAhead)
     {
         distToEdgePerGroup.resize(legGroups_.size(), 0.f);
