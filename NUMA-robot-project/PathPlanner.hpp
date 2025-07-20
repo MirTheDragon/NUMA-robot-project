@@ -76,11 +76,12 @@ public:
     
     // Pass robot controller reference in constructor
     PathPlanner(RobotController& robot);
-    float stepAreaPlacementDistance = 28.f; // cm step center from robot body center
+    float stepAreaPlacementDistance = 32.f; // cm step center from robot body center
+    bool returnToZeroRequested_ = false;
     
 
     // Max robot speed in cm/s (grounded feet move this fast)
-    float maxRobotSpeedCmPerSec = 20.0f;
+    float maxRobotSpeedCmPerSec = 35.0f;
     float RobotSpeedCmPerSec = 0.0f; // Current speed based on joystick input
 
     float stepHeight = 10.0f; // Default step height in cm, adjustable on the fly
@@ -91,6 +92,7 @@ public:
     void requestWalkCycleSwitch(WalkCycle* newCycle) {
         nextWalkCycle_ = newCycle;
     }
+    void requestReturnToZero(bool enabled);
 
     WalkCycle* currentWalkCycle_ = nullptr;  // Pointer to active walk cycle pattern
     WalkCycle* nextWalkCycle_ = nullptr;  // Pointer to active walk cycle pattern
@@ -144,7 +146,11 @@ private:
     // These functions operate on a WalkCycle instance
     void computeTimeToEdgePerGroup(WalkCycle& walkCycle, const Vec2& moveDir);
     void computeDistanceToBackEdgePerGroup(WalkCycle& walkCycle);
+
     void selectNextGroupToLift();
+    int pickNextResetGroup() const;
+    bool needsReset(size_t legIndex) const;
+
     float computeMaxDistanceToTargetInGroup(size_t groupIndex) const;
     float computeMaxDistanceAlongStep() const;
     Vec2 getSynchronizedStepAreaVector(const WalkCycle& walkCycle) const;

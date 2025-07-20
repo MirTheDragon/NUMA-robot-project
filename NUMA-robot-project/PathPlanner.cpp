@@ -38,6 +38,21 @@ PathPlanner::PathPlanner(RobotController& robot)
 
 
 void PathPlanner::update(const Vec2& joystickInput, float deltaTimeSeconds) {
+    if (joystickInput.length() <= 0.01f) {
+        if (!returnToZeroRequested_) {
+            std::cout << "[ReturnToZero] Activating return-to-zero mode (joystick idle)" << std::endl;
+        }
+        requestReturnToZero(true);
+    }
+
+    if (joystickInput.length() > 0.01f) {
+        if (returnToZeroRequested_) {
+            std::cout << "[ReturnToZero] Cancelling return-to-zero mode (joystick active)" << std::endl;
+        }
+        requestReturnToZero(false);
+    }
+
+
     // Update step centers based on leg angle and robot heading (XY only)
     float headingRad = robot_.Body.headingDeg * M_PI / 180.f;
     for (size_t i = 0; i < robot_.legCount_; ++i) {
@@ -65,6 +80,7 @@ void PathPlanner::update(const Vec2& joystickInput, float deltaTimeSeconds) {
                                         << foot.stepAreaCenter.y << ")\n";
     }
     */
+    
 }
 
 void PathPlanner::updateStepAreaCenter(size_t legIndex, float headingRad) {
@@ -154,8 +170,7 @@ void PathPlanner::pushTargetsToRobot() {
         };
 
         robot_.setFootTarget(i, footTarget3d);
-        foot.currentPosition = foot.desiredTarget;  // Update current position to desired target
-
+        foot.currentPosition = foot.desiredTarget;
     }
 }
 
@@ -181,6 +196,38 @@ void PathPlanner::stepPathLogic(const Vec2& joystickInput, float dt) {
 
 
 
+    //Leg Return to zero Step logic
+    if (returnToZeroRequested_) {
+        float fixedStepSpeed = maxRobotSpeedCmPerSec * currentWalkCycle_->liftedSpeedMultiplier_ / 2;
+        float maxStep = fixedStepSpeed * dt;
+
+        for (size_t i = 0; i < robot_.legCount_; ++i) {
+            FootStatusInternal& foot = footStatuses_[i];
+
+            if (foot.state == FootState::Lifted) {
+                Vec2 currentXY{foot.currentPosition.x, foot.currentPosition.y};
+                Vec2 center = foot.stepAreaCenter;
+                Vec2 toCenter = center - currentXY;
+
+                float dist = toCenter.length();
+                Vec2 stepVec = (dist <= maxStep) ? toCenter : toCenter.normalized() * maxStep;
+
+                foot.desiredTarget.x += stepVec.x;
+                foot.desiredTarget.y += stepVec.y;
+
+                foot.stepProgress = (dist <= maxStep) ? 1.f : foot.stepProgress;
+            }
+        }
+
+        // Skip everything else and just update heights
+        computeFootHeights(dt, Vec2{0.f, 0.f});
+        return;
+    }
+
+
+
+
+    // -- Active robot moving lifted leg step logic --
     // 1. Find max speed reduction factor needed
     float speedReductionFactor = 1.0f;  // 1.0 means no reduction
 
@@ -193,9 +240,8 @@ void PathPlanner::stepPathLogic(const Vec2& joystickInput, float dt) {
             // Vectors to both targets
             Vec2 toTarget = foot.stepAreaTarget - currentXY;
             Vec2 toSyncTarget = foot.stepAreaSyncronizedTarget - currentXY;
-
-            // Pick the closer target
             Vec2 chosenTarget = (toSyncTarget.length() < toTarget.length()) ? foot.stepAreaSyncronizedTarget : foot.stepAreaTarget;
+            // Pick the closer target
             Vec2 toChosenTarget = chosenTarget - currentXY;
 
             float minDistToBackEdge = currentWalkCycle_->getMinDistToBackEdge();
@@ -220,10 +266,11 @@ void PathPlanner::stepPathLogic(const Vec2& joystickInput, float dt) {
         if (foot.state == FootState::Lifted) {
             Vec2 currentXY{foot.currentPosition.x, foot.currentPosition.y};
 
+            // Vectors to both targets
             Vec2 toTarget = foot.stepAreaTarget - currentXY;
             Vec2 toSyncTarget = foot.stepAreaSyncronizedTarget - currentXY;
-
             Vec2 chosenTarget = (toSyncTarget.length() < toTarget.length()) ? foot.stepAreaSyncronizedTarget : foot.stepAreaTarget;
+            // Pick the closer target
             Vec2 toChosenTarget = chosenTarget - currentXY;
 
             float stepMoveIncrementLength = moveIncrement.length() * currentWalkCycle_->liftedSpeedMultiplier_ * speedReductionFactor;
@@ -260,17 +307,18 @@ void PathPlanner::stepPathLogic(const Vec2& joystickInput, float dt) {
         }
     }
 
-    for (size_t i = 0; i < robot_.legCount_; ++i) {
-        FootStatusInternal& foot = footStatuses_[i];
+    if (!returnToZeroRequested_){
+        for (size_t i = 0; i < robot_.legCount_; ++i) {
+            FootStatusInternal& foot = footStatuses_[i];
 
-        if (foot.state == FootState::Grounded) {
-            // Move desired target opposite to move direction at normal speed
-            foot.stepProgress = 0.f; // Reset step progress for grounded feet
-            foot.desiredTarget.x -= moveIncrement.x * speedReductionFactor;
-            foot.desiredTarget.y -= moveIncrement.y * speedReductionFactor;
-        } 
+            if (foot.state == FootState::Grounded) {
+                // Move desired target opposite to move direction at normal speed
+                foot.stepProgress = 0.f; // Reset step progress for grounded feet
+                foot.desiredTarget.x -= moveIncrement.x * speedReductionFactor;
+                foot.desiredTarget.y -= moveIncrement.y * speedReductionFactor;
+            } 
+        }
     }
-
     computeFootHeights(dt, joystickInput);  // Update foot heights based on step progress
 
 }
@@ -283,7 +331,40 @@ void PathPlanner::updateFootStateTransitionsByGroup() {
 
     bool anyGroupLifted = false;
 
+    // Check if legs returning to center are ready to ground
+    if (returnToZeroRequested_) {
+        for (size_t groupIndex = 0; groupIndex < legGroups.size(); ++groupIndex) {
+            const auto& group = legGroups[groupIndex];
+            bool groupIsLifted = false;
+            bool allWithinCenterThreshold = true;
+
+            for (size_t legIndex : group) {
+                const FootStatusInternal& foot = footStatuses_[legIndex];
+                if (foot.state == FootState::Lifted) {
+                    groupIsLifted = true;
+                    Vec2 pos{foot.currentPosition.x, foot.currentPosition.y};
+                    Vec2 center = foot.stepAreaCenter;
+                    float dist = (pos - center).length();
+                    if (dist > (stepAreaRadius_ * 0.05f)) {
+                        allWithinCenterThreshold = false;
+                        break;
+                    }
+                }
+            }
+
+            if (groupIsLifted && allWithinCenterThreshold) {
+                std::cout << "[Grounding - ReturnToZero] Grounding group " << groupIndex << " (all feet near center)\n";
+                for (size_t legIndex : group) {
+                    footStatuses_[legIndex].state = FootState::Grounded;
+                    footStatuses_[legIndex].stepProgress = 0.f;
+                }
+            }
+        }
+    }
+
+
     // Step 1: Process groups with lifted legs for grounding
+    if (!returnToZeroRequested_){
     for (const auto& group : legGroups) {
         bool hasLiftedLeg = false;
         for (size_t legIndex : group) {
@@ -301,7 +382,8 @@ void PathPlanner::updateFootStateTransitionsByGroup() {
             FootStatusInternal& foot = footStatuses_[legIndex];
             if (foot.state == FootState::Lifted) {
                 Vec2 currentXY{foot.currentPosition.x, foot.currentPosition.y};
-                Vec2 targetXY{foot.stepAreaTarget.x, foot.stepAreaTarget.y};
+                Vec2 targetXY = Vec2{foot.stepAreaTarget.x, foot.stepAreaTarget.y};
+
                 Vec2 toTarget = targetXY - currentXY;
 
                 float distToTarget = toTarget.length();
@@ -329,6 +411,7 @@ void PathPlanner::updateFootStateTransitionsByGroup() {
                 }
             }
         }
+    }
     }
 
     // Step 2: Only run if no group currently has lifted legs
@@ -412,6 +495,17 @@ void PathPlanner::updateFootStateTransitionsByGroup() {
 
     if (liftNextGroup) {
         size_t liftGroupIndex = currentWalkCycle_->optimalLiftedGroupIndex_;  // or minDistToBackGroupIndex_
+
+        if (returnToZeroRequested_) {
+            int resetGroup = pickNextResetGroup();
+            //std::cout << "[ReturnToZero] pickNextResetGroup() returned " << resetGroup << "\n";
+            if (resetGroup == -1) {
+                // All legs are already reset — no lift needed
+                return;
+            }
+            liftGroupIndex = resetGroup;
+        }
+
         currentWalkCycle_->lastLiftedGroupIndex_ = liftGroupIndex;
         const auto& group = currentWalkCycle_->getLegGroups()[liftGroupIndex];
         //std::cout << "[Lift] Lifting group " << liftGroupIndex << " legs: ";
@@ -684,3 +778,90 @@ void PathPlanner::printDebugStatus() const {
                   << std::endl;
     }
 }
+
+void PathPlanner::requestReturnToZero(bool enabled) {
+    if (returnToZeroRequested_ == enabled) return;  // No change
+    returnToZeroRequested_ = enabled;
+}
+
+bool PathPlanner::needsReset(size_t legIndex) const {
+    const auto& foot = footStatuses_[legIndex];
+    if (foot.state == FootState::Lifted) return false;  // we're already moving this one
+
+    Vec2 footPos{foot.currentPosition.x, foot.currentPosition.y};
+    Vec2 center = foot.stepAreaCenter;
+    float dist = (footPos - center).length();
+    /*
+    std::cout << "[ResetCheck] Leg " << legIndex
+          << " | State: " << (int)footStatuses_[legIndex].state
+          << " | Position: (" << foot.currentPosition.x << ", " << foot.currentPosition.y << ")"
+          << " | Center: (" << center.x << ", " << center.y << ")"
+          << " | DistToCenter: " << dist << std::endl;
+    */
+
+    return dist > (stepAreaRadius_ * 0.05f);
+}
+
+
+int PathPlanner::pickNextResetGroup() const {
+    if (!currentWalkCycle_) return -1;
+
+    const auto& groups = currentWalkCycle_->getLegGroups();
+    int bestGroup = -1;
+    float bestMinDist = std::numeric_limits<float>::max();
+
+    std::cout << "[PickResetGroup] Checking groups...\n";
+
+    for (size_t i = 0; i < groups.size(); ++i) {
+        float groupMinDist = std::numeric_limits<float>::max();
+        bool groupNeedsReset = false;
+
+        std::cout << "  Group " << i << ":\n";
+
+        for (size_t legIndex : groups[i]) {
+            const auto& foot = footStatuses_[legIndex];
+
+            if (foot.state == FootState::Lifted) {
+                std::cout << "    Leg " << legIndex << " is lifted, skipping\n";
+                continue;
+            }
+
+            Vec2 footPos{foot.desiredTarget.x, foot.desiredTarget.y};
+            Vec2 center = foot.stepAreaCenter;
+            float dist = (footPos - center).length();
+            bool needs = dist > (stepAreaRadius_ * 0.05f);
+
+            std::cout << "    Leg " << legIndex
+                      << " | Pos=(" << footPos.x << "," << footPos.y << ")"
+                      << " | Center=(" << center.x << "," << center.y << ")"
+                      << " | Dist=" << dist
+                      << " | NeedsReset=" << (needs ? "YES" : "no") << "\n";
+
+            if (needs) {
+                groupNeedsReset = true;
+                groupMinDist = std::min(groupMinDist, dist);
+            }
+        }
+
+        if (groupNeedsReset) {
+            std::cout << "    → Group " << i << " needs reset (minDist=" << groupMinDist << ")\n";
+            if (groupMinDist < bestMinDist) {
+                bestMinDist = groupMinDist;
+                bestGroup = static_cast<int>(i);
+            }
+        } else {
+            std::cout << "    → Group " << i << " does NOT need reset\n";
+        }
+    }
+
+    if (bestGroup == -1) {
+        std::cout << "[PickResetGroup] No group needs reset.\n";
+    } else {
+        std::cout << "[PickResetGroup] Selected group " << bestGroup << " (minDist=" << bestMinDist << ")\n";
+    }
+
+    return bestGroup;
+}
+
+
+

@@ -48,7 +48,6 @@ void gamepadPollingThread() {
             }
         }
         eventQueueCV.notify_one();
-
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
 }
@@ -113,6 +112,7 @@ int main() {
     std::cout << "GamepadController created." << std::endl;
 
     std::vector<ComboEvent> comboDefs = {
+        {"X", {"Left"}, "X+Left"},
         {"Y", {"Up"}, "Y+Up"},
         {"Y", {"Down"}, "Y+Down"},
         {"Y", {"Left"}, "Y+Left"},
@@ -162,8 +162,13 @@ int main() {
             while (!gamepadEventQueue.empty()) {
                 const auto& ev = gamepadEventQueue.front();
 
-                // Walkcycle mode cycler on X click
-                if (ev.type == "click" && ev.name == "X") {
+                // Return to zero on X Click
+                if (ev.type == "clikc" && ev.name == "X"){
+                    pathPlanner->requestReturnToZero(true);
+                }
+
+                // Combo X + Left Walkcycle mode cycler
+                if (ev.type == "combo" && ev.name == "X+Left") {
                     currentWalkCycleIndex = (currentWalkCycleIndex + 1) % walkCycles.size();
                     pathPlanner->requestWalkCycleSwitch(walkCycles[currentWalkCycleIndex]);
                     std::cout << "Switched to walk cycle index: " << currentWalkCycleIndex << std::endl;
