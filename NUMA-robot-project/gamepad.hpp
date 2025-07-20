@@ -54,6 +54,12 @@ struct GamepadState {
     Joystick leftStick;
     Joystick rightStick;
     Triggers triggers;
+
+    // ── LOCKING MEMBERS ──
+    bool movementLocked      = false;
+    bool lookLocked          = false;
+    Joystick lockedLeftStick;   // to store frozen movement
+    Joystick lockedRightStick;  // to store frozen look
 };
 
 class GamepadController {

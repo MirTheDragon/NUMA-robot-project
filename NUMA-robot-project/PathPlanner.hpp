@@ -81,7 +81,7 @@ public:
     
 
     // Max robot speed in cm/s (grounded feet move this fast)
-    float maxRobotSpeedCmPerSec = 35.0f;
+    float maxRobotSpeedCmPerSec = 25.0f;
     float RobotSpeedCmPerSec = 0.0f; // Current speed based on joystick input
 
     float stepHeight = 10.0f; // Default step height in cm, adjustable on the fly

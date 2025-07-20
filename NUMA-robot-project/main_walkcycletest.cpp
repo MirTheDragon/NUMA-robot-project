@@ -53,33 +53,49 @@ void gamepadPollingThread() {
 }
 
 void ikThread(RobotController& robot) {
-    const int ikLoopHz = 60;
+    const int ikLoopHz = 120;
     const auto ikLoopInterval = std::chrono::milliseconds(1000 / ikLoopHz);
 
     while (running) {
         auto start = std::chrono::steady_clock::now();
 
+        // ——— LOOK (right stick) ———
+        Joystick lookJoy;
+        {
+            std::lock_guard<std::mutex> lock(stateMutex);
+            if (sharedState.lookLocked) {
+                lookJoy = sharedState.lockedRightStick;
+            } else {
+                lookJoy = sharedState.rightStick;
+            }
+        }
 
         // Body orientation
         // Set robot heading to max ±30° scaled by left stick X
-        robot.Body.targetHeadingDeg = -sharedState.rightStick.x_raw * 30.0f;
+        robot.Body.targetHeadingDeg = -lookJoy.x_raw * 30.0f;
         robot.Body.targetTiltAzimuthDeg = 90.0f;
-        robot.Body.targetTiltPolarDeg   = -sharedState.rightStick.y_raw * 30.0f;
+        robot.Body.targetTiltPolarDeg   = -lookJoy.y_raw * 30.0f;
 
         // Set face pan to ±60° scaled by right stick X
-        robot.Face.pan.value = robot.Face.pan.restDeg - sharedState.rightStick.x_raw * 70.0f;
+        robot.Face.pan.value = robot.Face.pan.restDeg - lookJoy.x_raw * 70.0f;
         // Set face tilt to ±20° scaled by right stick Y (invert Y if natural)
-        robot.Face.tilt.value = robot.Face.tilt.restDeg + sharedState.rightStick.y_raw * 30.0f;
+        robot.Face.tilt.value = robot.Face.tilt.restDeg + lookJoy.y_raw * 30.0f;
 
-        // Lock joystick state copy for thread safety
-        Vec2 joystickCopy;
+        // ——— MOVEMENT (left stick) ———
+        Joystick moveJoy;
         {
             std::lock_guard<std::mutex> lock(stateMutex);
-            joystickCopy = Vec2(sharedState.leftStick.x, sharedState.leftStick.y);
+            if (sharedState.movementLocked) {
+                moveJoy = sharedState.lockedLeftStick;
+            } else {
+                moveJoy = sharedState.leftStick;
+            }
         }
-        if (joystickCopy.length() < 0.05f) {
-            joystickCopy = Vec2(0.f, 0.f);
-        }
+        
+        Vec2 joystickCopy{ moveJoy.x, moveJoy.y };
+        
+        if (joystickCopy.length() < 0.05f)
+            joystickCopy = {0.f, 0.f};
 
         // Time PathPlanner update + IK update combined
         auto pathStart = std::chrono::steady_clock::now();
@@ -139,7 +155,7 @@ int main() {
         return 1;
     }
 
-    robot.Body.position = { 0.f, 0.f, robot.Body.originStartingHeight + 20.0f };
+    robot.Body.position = { 0.f, 0.f, robot.Body.originStartingHeight + 3.0f };
     pathPlanner = new PathPlanner(robot);
     pathPlanner->currentWalkCycle_ = walkCycles[0];
     currentWalkCycleIndex = 0;
@@ -218,6 +234,58 @@ int main() {
                     robot.Face.lightMode = LightMode::Steady;
                     std::cout << "[Light] Reset brightness to 0%, mode to STEADY\n";
                 }
+
+                // Arrow key clicks handle stance opperations
+                if (ev.type == "click" && ev.name == "Up") {
+                    // TODO: handle Up arrow click
+                    if( robot.Body.position.z < 30)
+                        robot.Body.position.z += 1.0f;
+                }
+
+                if (ev.type == "click" && ev.name == "Down") {
+                    // TODO: handle Down arrow click
+                    if( robot.Body.position.z > 0)
+                        robot.Body.position.z -= 1.0f;
+                }
+
+                if (ev.type == "click" && ev.name == "Left") {
+                    // TODO: handle Left arrow click
+                    pathPlanner->stepAreaPlacementDistance += 3.0f;
+                }
+
+                if (ev.type == "click" && ev.name == "Right") {
+                    // TODO: handle Right arrow click
+                    pathPlanner->stepAreaPlacementDistance -= 3.0f;
+                }
+
+                // ── Movement lock toggle ──
+                if (ev.type == "click" && ev.name == "LB") {
+                    sharedState.movementLocked = !sharedState.movementLocked;
+                    if (sharedState.movementLocked) {
+                        // snapshot the current left stick
+                        sharedState.lockedLeftStick = sharedState.leftStick;
+                        std::cout << "[Lock] Movement locked at ("
+                                << sharedState.lockedLeftStick.x << ", "
+                                << sharedState.lockedLeftStick.y << ")\n";
+                    } else {
+                        std::cout << "[Lock] Movement unlocked\n";
+                    }
+                }
+
+                // ── Look lock toggle ──
+                if (ev.type == "click" && ev.name == "RB") {
+                    sharedState.lookLocked = !sharedState.lookLocked;
+                    if (sharedState.lookLocked) {
+                        // snapshot the current right stick
+                        sharedState.lockedRightStick = sharedState.rightStick;
+                        std::cout << "[Lock] Look locked at ("
+                                << sharedState.lockedRightStick.x_raw << ", "
+                                << sharedState.lockedRightStick.y_raw << ")\n";
+                    } else {
+                        std::cout << "[Lock] Look unlocked\n";
+                    }
+                }
+                
 
                 gamepadEventQueue.pop();
             }
