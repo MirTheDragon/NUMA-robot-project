@@ -207,20 +207,25 @@ void PathPlanner::stepPathLogic(const Vec2& directionInput, float turningInput, 
     // Pre–compute for Vec2 rotation
     float deltaRad = deltaDeg * (M_PI / 180.f);
 
-    for (size_t i = 0; i < robot_.legCount_; ++i) {
-        auto& foot = footStatuses_[i];
-        if (foot.state == FootState::Grounded) {
-            // Rotate the *current* XY positions around the body origin
-            Vec2 pos{ foot.currentPosition.x, foot.currentPosition.y };
-            Vec2 rotated = rotateZ(pos, deltaRad);
-            foot.currentPosition.x = rotated.x;
-            foot.currentPosition.y = rotated.y;
+    // --- extra: spin desiredTargets around the body origin ---
+    if (std::abs(turningInput) > 1e-3f) {
+        // compute angle this frame
+        float deltaDeg = -turningInput * maxRobotSteeringDeltaDegperSec * dt;
 
-            // Also rotate the *desiredTarget* to keep them in sync
-            Vec2 tgt{ foot.desiredTarget.x, foot.desiredTarget.y };
-            Vec2 tgtRot = rotateZ(tgt, deltaRad);
-            foot.desiredTarget.x = tgtRot.x;
-            foot.desiredTarget.y = tgtRot.y;
+        for (size_t i = 0; i < robot_.legCount_; ++i) {
+            auto& foot = footStatuses_[i];
+
+            // current foot pos relative to body origin
+            Vec2 relPos{ foot.currentPosition.x, foot.currentPosition.y };
+            // rotate that vector by deltaRad
+            Vec2 relRot = rotateZ(relPos, deltaDeg);
+
+            // delta = how much it moved on the circle
+            Vec2 rotOffset = relRot - relPos;
+
+            // *add* that offset to the desired target
+            foot.desiredTarget.x += rotOffset.x;
+            foot.desiredTarget.y += rotOffset.y;
         }
     }
 
