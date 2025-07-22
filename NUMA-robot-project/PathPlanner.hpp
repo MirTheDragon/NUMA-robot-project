@@ -78,17 +78,19 @@ public:
     PathPlanner(RobotController& robot);
     float stepAreaPlacementDistance = 32.f; // cm step center from robot body center
     bool returnToZeroRequested_ = false;
+    float returnToZeroSpacingDistance = 1.0f;
     
 
     // Max robot speed in cm/s (grounded feet move this fast)
     float maxRobotSpeedCmPerSec = 25.0f;
+    float maxRobotSteeringDeltaDegperSec = 30;
     float RobotSpeedCmPerSec = 0.0f; // Current speed based on joystick input
 
     float stepHeight = 10.0f; // Default step height in cm, adjustable on the fly
     bool clampFootTargets = true;  // Toggle clamping on/off
 
     // Update planner state with joystick input and elapsed time (seconds)
-    void update(const Vec2& joystickInput, float deltaTimeSeconds);
+    void update(const Vec2& joystickInput, float turningInput, float deltaTimeSeconds);
     void requestWalkCycleSwitch(WalkCycle* newCycle) {
         nextWalkCycle_ = newCycle;
     }
@@ -137,7 +139,7 @@ private:
 
     // Update foot states and compute stepProgress and foot height smoothly:
     void updateFootStateTransitionsByGroup();
-    void stepPathLogic(const Vec2& joystickInput, float dt);
+    void stepPathLogic(const Vec2& joystickInput, float turningInput, float dt);
 
 
     // Helper to compute vertical offset (height) based on stepProgress

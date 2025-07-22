@@ -97,5 +97,12 @@ void RobotBody::updateSmoothedPose() {
     headingDeg = smooth(headingDeg, targetHeadingDeg, maxHeadingVelocityDegPerSec, dt);
     tiltAzimuthDeg = smooth(tiltAzimuthDeg, targetTiltAzimuthDeg, maxTiltVelocityDegPerSec, dt);
     tiltPolarDeg   = smooth(tiltPolarDeg, targetTiltPolarDeg, maxTiltVelocityDegPerSec, dt);
+
+    // — smooth Z position —
+    float heightDelta    = targetPosition.z - position.z;
+    float maxHeightStep  = maxPositionVelocityCmPerSec * dt;
+    if (heightDelta >  maxHeightStep)      heightDelta =  maxHeightStep;
+    else if (heightDelta < -maxHeightStep) heightDelta = -maxHeightStep;
+    position.z += heightDelta;
 }
 

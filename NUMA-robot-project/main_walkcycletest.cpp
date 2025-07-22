@@ -97,10 +97,23 @@ void ikThread(RobotController& robot) {
         if (joystickCopy.length() < 0.05f)
             joystickCopy = {0.f, 0.f};
 
+
+        // -- Steering of movement (Differential LT and RT) --
+        float lt, rt;
+        {
+            std::lock_guard<std::mutex> lk(stateMutex);
+            lt = sharedState.triggers.left;  // assume 0…1
+            rt = sharedState.triggers.right;  // assume 0…1
+        }
+        // differential: RT=1, LT=0 → +1 turn right; RT=0, LT=1 → ‑1 turn left
+        float turnInput = lt - rt;
+        // clamp in case
+        turnInput = std::max(-1.0f, std::min(1.0f, turnInput));
+
         // Time PathPlanner update + IK update combined
         auto pathStart = std::chrono::steady_clock::now();
 
-        pathPlanner->update(joystickCopy, ikLoopInterval.count() / 1000.0f);
+        pathPlanner->update(joystickCopy, turnInput, ikLoopInterval.count() / 1000.0f);
         // pathPlanner->printDebugStatus(); // Debug print for foot status
 
         robot.updateKinematicsAndApply();
@@ -155,7 +168,7 @@ int main() {
         return 1;
     }
 
-    robot.Body.position = { 0.f, 0.f, robot.Body.originStartingHeight + 3.0f };
+    robot.Body.position = { 0.f, 0.f, robot.Body.originStartingHeight - 3.0f};
     pathPlanner = new PathPlanner(robot);
     pathPlanner->currentWalkCycle_ = walkCycles[0];
     currentWalkCycleIndex = 0;
@@ -236,26 +249,26 @@ int main() {
                 }
 
                 // Arrow key clicks handle stance opperations
-                if (ev.type == "click" && ev.name == "Up") {
+                if (ev.type == "combo" && ev.name == "A+Up") {
                     // TODO: handle Up arrow click
-                    if( robot.Body.position.z < 30)
-                        robot.Body.position.z += 1.0f;
+                    if( robot.Body.targetPosition.z < 45)
+                        robot.Body.targetPosition.z += 3.0f;
                 }
 
-                if (ev.type == "click" && ev.name == "Down") {
+                if (ev.type == "combo" && ev.name == "A+Down") {
                     // TODO: handle Down arrow click
-                    if( robot.Body.position.z > 0)
-                        robot.Body.position.z -= 1.0f;
+                    if( robot.Body.targetPosition.z > -robot.Body.originStartingHeight)
+                        robot.Body.targetPosition.z -= 3.0f;
                 }
 
-                if (ev.type == "click" && ev.name == "Left") {
+                if (ev.type == "combo" && ev.name == "A+Right") {
                     // TODO: handle Left arrow click
-                    pathPlanner->stepAreaPlacementDistance += 3.0f;
+                    pathPlanner->stepAreaPlacementDistance += 4.0f;
                 }
 
-                if (ev.type == "click" && ev.name == "Right") {
+                if (ev.type == "combo" && ev.name == "A+Left") {
                     // TODO: handle Right arrow click
-                    pathPlanner->stepAreaPlacementDistance -= 3.0f;
+                    pathPlanner->stepAreaPlacementDistance -= 4.0f;
                 }
 
                 // ── Movement lock toggle ──

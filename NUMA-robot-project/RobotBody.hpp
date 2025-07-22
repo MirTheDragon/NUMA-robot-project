@@ -98,6 +98,7 @@ public:
 
 
     Vec3 position = {0.f, 0.f, originStartingHeight};
+    Vec3 targetPosition = {0.f, 0.f, originStartingHeight};
     
     // Heading (yaw)
     float headingDeg = 0.f;
@@ -110,6 +111,7 @@ public:
     float targetTiltPolarDeg   = 0.f;
 
     // Limits
+    float maxPositionVelocityCmPerSec = 5.0f;
     float maxHeadingVelocityDegPerSec = 30.f;
     float maxTiltVelocityDegPerSec = 30.f;
 

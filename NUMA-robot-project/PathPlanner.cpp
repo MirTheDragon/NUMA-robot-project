@@ -37,15 +37,15 @@ PathPlanner::PathPlanner(RobotController& robot)
 }
 
 
-void PathPlanner::update(const Vec2& joystickInput, float deltaTimeSeconds) {
-    if (joystickInput.length() <= 0.01f) {
+void PathPlanner::update(const Vec2& directionInput, float turningInput, float deltaTimeSeconds) {
+    if (directionInput.length() <= 0.01f) {
         if (!returnToZeroRequested_) {
             std::cout << "[ReturnToZero] Activating return-to-zero mode (joystick idle)" << std::endl;
         }
         requestReturnToZero(true);
     }
 
-    if (joystickInput.length() > 0.01f) {
+    if (directionInput.length() > 0.01f) {
         if (returnToZeroRequested_) {
             std::cout << "[ReturnToZero] Cancelling return-to-zero mode (joystick active)" << std::endl;
         }
@@ -61,10 +61,10 @@ void PathPlanner::update(const Vec2& joystickInput, float deltaTimeSeconds) {
     }
 
     // Update desired foot XY targets based on joystick input
-    updateStepAreaTargets(joystickInput);
+    updateStepAreaTargets(directionInput);
 
     // Update foot states and progress
-    stepPathLogic(joystickInput, deltaTimeSeconds);
+    stepPathLogic(directionInput, turningInput, deltaTimeSeconds);
 
     // Push 3D foot targets (including height) to robot controller
     pushTargetsToRobot();
@@ -175,11 +175,11 @@ void PathPlanner::pushTargetsToRobot() {
     }
 }
 
-void PathPlanner::stepPathLogic(const Vec2& joystickInput, float dt) {
+void PathPlanner::stepPathLogic(const Vec2& directionInput, float turningInput, float dt) {
     if (!currentWalkCycle_) return;  // Safety check
 
     // Precompute the move increment vector = direction * speed * dt
-    Vec2 moveIncrement = joystickInput * maxRobotSpeedCmPerSec * dt;
+    Vec2 moveIncrement = directionInput * maxRobotSpeedCmPerSec * dt;
 
     // Variable to reduce speed if necessary
     // This will be used to limit the step increment of lifted legs and reduce robot speed if necessary    
@@ -187,17 +187,45 @@ void PathPlanner::stepPathLogic(const Vec2& joystickInput, float dt) {
 
 
     // Update step area centers based on leg angle and robot heading
-    updateStepAreaTargets(joystickInput);
+    updateStepAreaTargets(directionInput);
     updateSynchronizedStepAreaTargets();
     
     // Compute distance to back edge for each group using currentWalkCycle_
     computeDistanceToBackEdgePerGroup(*currentWalkCycle_);
+
+    if (turningInput != 0.0f) {
+        returnToZeroSpacingDistance = stepAreaRadius_ * currentWalkCycle_->fractionAhead_ / 2;
+    } else {
+        returnToZeroSpacingDistance = currentWalkCycle_->positionThreshold_;
+    }
+    
     updateFootStateTransitionsByGroup();
 
+    // --- 0) Steering rotation for grounded feet ---
+    // Compute how many degrees to rotate this frame
+    float deltaDeg = turningInput * maxRobotSteeringDeltaDegperSec * dt;
+    // Pre–compute for Vec2 rotation
+    float deltaRad = deltaDeg * (M_PI / 180.f);
+
+    for (size_t i = 0; i < robot_.legCount_; ++i) {
+        auto& foot = footStatuses_[i];
+        if (foot.state == FootState::Grounded) {
+            // Rotate the *current* XY positions around the body origin
+            Vec2 pos{ foot.currentPosition.x, foot.currentPosition.y };
+            Vec2 rotated = rotateZ(pos, deltaRad);
+            foot.currentPosition.x = rotated.x;
+            foot.currentPosition.y = rotated.y;
+
+            // Also rotate the *desiredTarget* to keep them in sync
+            Vec2 tgt{ foot.desiredTarget.x, foot.desiredTarget.y };
+            Vec2 tgtRot = rotateZ(tgt, deltaRad);
+            foot.desiredTarget.x = tgtRot.x;
+            foot.desiredTarget.y = tgtRot.y;
+        }
+    }
 
 
-
-    //Leg Return to zero Step logic
+    // Step 0.5: Leg Return‑to‑Zero Step Logic
     if (returnToZeroRequested_) {
         float fixedStepSpeed = maxRobotSpeedCmPerSec * currentWalkCycle_->liftedSpeedMultiplier_ / 2;
         float maxStep = fixedStepSpeed * dt;
@@ -331,7 +359,7 @@ void PathPlanner::stepPathLogic(const Vec2& joystickInput, float dt) {
         }
     }
 
-    computeFootHeights(dt, joystickInput);  // Update foot heights based on step progress
+    computeFootHeights(dt, directionInput);  // Update foot heights based on step progress
 
 }
 
@@ -851,7 +879,7 @@ int PathPlanner::pickNextResetGroup() const {
             Vec2 footPos{foot.desiredTarget.x, foot.desiredTarget.y};
             Vec2 center = foot.stepAreaCenter;
             float dist = (footPos - center).length();
-            bool needs = dist > (stepAreaRadius_ * 0.05f);
+            bool needs = dist > returnToZeroSpacingDistance;
 
             std::cout << "    Leg " << legIndex
                       << " | Pos=(" << footPos.x << "," << footPos.y << ")"
