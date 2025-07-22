@@ -115,6 +115,7 @@ bool GamepadController::initialize(const std::vector<ComboEvent>& combos) {
         addCombo(combo.holdButton, combo.sequence, combo.name);
     }
 
+    /*
     std::cout << "Press any button to continue...";
     input_event ev;
 
@@ -128,6 +129,7 @@ bool GamepadController::initialize(const std::vector<ComboEvent>& combos) {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
     }
+    */
 
     return true;
 }

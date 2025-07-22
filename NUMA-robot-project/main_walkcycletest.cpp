@@ -154,6 +154,15 @@ int main() {
         std::cout << "Gamepad initialized successfully.\n";
     }
 
+    SDL_Joystick* joystick = nullptr;
+    bool boot = showBootPrompt(joystick);
+    if (!boot) {
+        std::cout << "User exited before boot.\n";
+        return 0;
+    }
+    // At this point you have a window‐based prompt, user pressed Y,
+    // and SDL is still initialized for video/joystick.
+
     if (!initGraphics()) return 1;
 
     static WalkCycle walkCycle3Set({ {0, 2, 4}, {1, 3, 5} }, 1.f, 1.0f, 1.0f);

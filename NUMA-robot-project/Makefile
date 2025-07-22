@@ -1,8 +1,10 @@
 CC       = gcc
 CXX      = g++
+PKG_CFLAGS   = $(shell pkg-config --cflags sdl2 SDL2_ttf)
+PKG_LIBS     = $(shell pkg-config --libs   sdl2 SDL2_ttf)
 CFLAGS   = -Wall -O2
-CXXFLAGS = -Wall -O2 -I/usr/include/libevdev-1.0
-LDFLAGS  = -lrt -lpthread -lSDL2 -lSDL2_gfx -levdev
+CXXFLAGS = -Wall -O2 -I/usr/include/libevdev-1.0 $(PKG_CFLAGS)
+LDFLAGS  = -lrt -lpthread -lSDL2 -lSDL2_gfx -levdev $(PKG_LIBS)
 
 # Define all targets and their source files here
 TARGETS = main ServoController_test RobotController_test PCA9685_test ServoController_servotester main_walkcycletest
