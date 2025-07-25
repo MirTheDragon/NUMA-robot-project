@@ -121,7 +121,7 @@ void PathPlanner::updateStepAreaTargets(const Vec2& joystickInput) {
 }
 
 void PathPlanner::computeFootHeights(float deltaTimeSeconds, const Vec2& joystickInput) {
-    const float maxHeightChangeSpeed = maxRobotSpeedCmPerSec; // cm per second max vertical speed
+    const float maxHeightChangeSpeed = maxRobotSpeedCmPerSec * 2; // cm per second max vertical speed
 
     for (size_t i = 0; i < robot_.legCount_; ++i) {
         FootStatusInternal& foot = footStatuses_[i];
@@ -194,7 +194,7 @@ void PathPlanner::stepPathLogic(const Vec2& directionInput, float turningInput, 
     computeDistanceToBackEdgePerGroup(*currentWalkCycle_);
 
     if (turningInput != 0.0f) {
-        returnToZeroSpacingDistance = stepAreaRadius_ * currentWalkCycle_->fractionAhead_ / 2;
+        returnToZeroSpacingDistance = stepAreaRadius_ * currentWalkCycle_->fractionAhead_;
     } else {
         returnToZeroSpacingDistance = currentWalkCycle_->positionThreshold_;
     }
@@ -214,25 +214,29 @@ void PathPlanner::stepPathLogic(const Vec2& directionInput, float turningInput, 
 
         for (size_t i = 0; i < robot_.legCount_; ++i) {
             auto& foot = footStatuses_[i];
+            
+            // Apply rotation only if the foot is on the ground
+            if (foot.state == FootState::Grounded) {
 
-            // current foot pos relative to body origin
-            Vec2 relPos{ foot.currentPosition.x, foot.currentPosition.y };
-            // rotate that vector by deltaRad
-            Vec2 relRot = rotateZ(relPos, deltaDeg);
+                // current foot pos relative to body origin
+                Vec2 relPos{ foot.currentPosition.x, foot.currentPosition.y };
+                // rotate that vector by deltaRad
+                Vec2 relRot = rotateZ(relPos, deltaDeg);
 
-            // delta = how much it moved on the circle
-            Vec2 rotOffset = relRot - relPos;
+                // delta = how much it moved on the circle
+                Vec2 rotOffset = relRot - relPos;
 
-            // *add* that offset to the desired target
-            foot.desiredTarget.x += rotOffset.x;
-            foot.desiredTarget.y += rotOffset.y;
+                // *add* that offset to the desired target
+                foot.desiredTarget.x += rotOffset.x;
+                foot.desiredTarget.y += rotOffset.y;
+            }
         }
     }
 
 
     // Step 0.5: Leg Return‑to‑Zero Step Logic
     if (returnToZeroRequested_) {
-        float fixedStepSpeed = maxRobotSpeedCmPerSec * currentWalkCycle_->liftedSpeedMultiplier_ / 2;
+        float fixedStepSpeed = maxRobotSpeedCmPerSec * (currentWalkCycle_->liftedSpeedMultiplier_) / 3 * (std::abs(turningInput) * 1.5 + 1);
         float maxStep = fixedStepSpeed * dt;
 
         for (size_t i = 0; i < robot_.legCount_; ++i) {

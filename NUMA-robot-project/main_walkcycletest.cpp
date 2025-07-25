@@ -342,6 +342,8 @@ int main() {
         return 1;
     }
 
+    robot.Face.lightBrightness = 0.2f;
+
     robot.Body.position = { 0.f, 0.f, robot.Body.originStartingHeight - 3.0f};
     pathPlanner = new PathPlanner(robot);
     pathPlanner->currentWalkCycle_ = walkCycles[0];
