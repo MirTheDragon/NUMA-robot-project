@@ -86,7 +86,7 @@ public:
     float maxRobotSteeringDeltaDegperSec = 30;
     float RobotSpeedCmPerSec = 0.0f; // Current speed based on joystick input
 
-    float stepHeight = 10.0f; // Default step height in cm, adjustable on the fly
+    float stepHeight = 15.0f; // Default step height in cm, adjustable on the fly
     bool clampFootTargets = true;  // Toggle clamping on/off
 
     // Update planner state with joystick input and elapsed time (seconds)

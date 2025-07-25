@@ -4,6 +4,7 @@
 #include <vector>
 #include <string>
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_ttf.h>
 #include <iostream>
 #include <chrono>
 #include <thread>
@@ -22,10 +23,18 @@ std::queue<GamepadEvent> gamepadEventQueue;
 std::mutex eventQueueMutex;
 std::condition_variable eventQueueCV;
 
+extern GamepadController pad;
+extern GamepadState sharedState;
 GamepadController pad;
-
-GamepadState sharedState;
+GamepadState      sharedState;
 std::mutex stateMutex;
+std::vector<ComboEvent> comboDefs = {
+    {"X", {"Left"}, "X+Left"},
+    {"Y", {"Up"}, "Y+Up"},
+    {"Y", {"Down"}, "Y+Down"},
+    {"Y", {"Left"}, "Y+Left"},
+    {"Y", {"Right"}, "Y+Right"}
+};
 
 std::atomic<bool> running(true);
 
@@ -35,6 +44,149 @@ uint64_t ikDurationUs = 0;
 std::mutex mainTimingMutex;
 uint64_t mainLoopDurationUs = 0;
 uint64_t pathPlannerDurationUs = 0;
+
+bool showBootPrompt(SDL_Joystick*& joystick) {
+    // — 1) Init SDL video, joystick, and TTF —
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK) != 0) {
+        std::cerr << "SDL_Init failed: " << SDL_GetError() << "\n";
+        return false;
+    }
+    if (TTF_Init() != 0) {
+        std::cerr << "TTF_Init failed: " << TTF_GetError() << "\n";
+        SDL_Quit();
+        return false;
+    }
+
+    // — 2) Create fullscreen window & renderer —
+    SDL_DisplayMode dm;
+    SDL_GetCurrentDisplayMode(0, &dm);
+    SDL_Window*   window   = SDL_CreateWindow(
+        "NUMA Boot",
+        SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
+        dm.w, dm.h,
+        SDL_WINDOW_FULLSCREEN_DESKTOP
+    );
+    SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+    if (!window || !renderer) {
+        std::cerr << "Failed to create window/renderer: " << SDL_GetError() << "\n";
+        TTF_Quit();
+        SDL_Quit();
+        return false;
+    }
+    SDL_ShowCursor(SDL_DISABLE);
+
+    // — 3) Load font scaled to screen height (~5%) —
+    int fontSize = dm.h / 20;
+    TTF_Font* font = TTF_OpenFont(
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        fontSize
+    );
+    if (!font) {
+        std::cerr << "Failed to open font: " << TTF_GetError() << "\n";
+        SDL_DestroyRenderer(renderer);
+        SDL_DestroyWindow(window);
+        TTF_Quit();
+        SDL_Quit();
+        return false;
+    }
+
+    // — 4) Prepare prompt texture —
+    const char* msg = "Press Y to boot NUMA hexapod\nPress X to exit";
+    SDL_Color white = {255,255,255,255};
+    int wrapWidth = dm.w * 8 / 10;
+    SDL_Surface* surf = TTF_RenderText_Blended_Wrapped(font, msg, white, wrapWidth);
+    SDL_Texture* textTex = SDL_CreateTextureFromSurface(renderer, surf);
+    int texW = surf->w, texH = surf->h;
+    SDL_FreeSurface(surf);
+
+    // — 5) Setup gamepad combo definitions & state —
+    std::vector<ComboEvent> comboDefs = {
+        {"X", {"Left"},  "X+Left"},
+        {"Y", {"Up"},    "Y+Up"},
+        {"Y", {"Down"},  "Y+Down"},
+        {"Y", {"Left"},  "Y+Left"},
+        {"Y", {"Right"}, "Y+Right"}
+    };
+    bool padReady = false;
+
+    // — 6) Main prompt loop —
+    bool boot = false, done = false;
+    while (!done) {
+        // 6a) Attempt to initialize your GamepadController
+        if (!padReady) {
+            if (pad.initialize(comboDefs)) {
+                padReady = true;
+                std::cout << "Gamepad connected!\n";
+            }
+        }
+        // 6b) Open SDL joystick for raw events (optional)
+        if (padReady && SDL_NumJoysticks() > 0 && !joystick) {
+            joystick = SDL_JoystickOpen(0);
+        }
+
+        // 6c) Poll SDL events
+        SDL_Event e;
+        while (SDL_PollEvent(&e)) {
+            if (e.type == SDL_QUIT) {
+                boot = false;
+                done = true;
+            }
+            if (e.type == SDL_KEYDOWN) {
+                if (e.key.keysym.sym == SDLK_x) {
+                    boot = false; done = true;
+                }
+                if (e.key.keysym.sym == SDLK_y && padReady) {
+                    boot = true; done = true;
+                }
+            }
+            if (e.type == SDL_JOYBUTTONDOWN && padReady) {
+                // adjust these indices for your controller
+                if (e.jbutton.button == 3) { // Y
+                    boot = true; done = true;
+                }
+                if (e.jbutton.button == 2) { // X
+                    boot = false; done = true;
+                }
+            }
+        }
+
+        // 6d) Poll your GamepadController for combo events
+        pad.update(sharedState);
+        auto evs = pad.pollEvents();
+        for (auto& ev : evs) {
+            if (ev.type == "click" && ev.name == "X") {
+                boot = false; done = true;
+            }
+            if (ev.type == "click" && ev.name == "Y" && padReady) {
+                boot = true;  done = true;
+            }
+        }
+
+        // 6e) Draw the black background + centered prompt
+        SDL_SetRenderDrawColor(renderer, 0,0,0,255);
+        SDL_RenderClear(renderer);
+        SDL_Rect dst;
+        dst.w = texW;
+        dst.h = texH;
+        dst.x = (dm.w - texW) / 2;
+        dst.y = (dm.h - texH) / 2;
+        SDL_RenderCopy(renderer, textTex, nullptr, &dst);
+        SDL_RenderPresent(renderer);
+
+        SDL_Delay(50);
+    }
+
+    // — 7) Cleanup —
+    SDL_DestroyTexture(textTex);
+    TTF_CloseFont(font);
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+    TTF_Quit();
+    SDL_Quit();
+
+    return boot;
+}
+
 
 void gamepadPollingThread() {
     while (running) {
@@ -140,14 +292,6 @@ int main() {
 
     std::cout << "GamepadController created." << std::endl;
 
-    std::vector<ComboEvent> comboDefs = {
-        {"X", {"Left"}, "X+Left"},
-        {"Y", {"Up"}, "Y+Up"},
-        {"Y", {"Down"}, "Y+Down"},
-        {"Y", {"Left"}, "Y+Left"},
-        {"Y", {"Right"}, "Y+Right"}
-    };
-
     if (!pad.initialize(comboDefs)) {
         std::cerr << "Warning: Gamepad not detected!\n";
     } else {
@@ -156,13 +300,34 @@ int main() {
 
     SDL_Joystick* joystick = nullptr;
     bool boot = showBootPrompt(joystick);
+
+
     if (!boot) {
         std::cout << "User exited before boot.\n";
         return 0;
     }
     // At this point you have a window‐based prompt, user pressed Y,
     // and SDL is still initialized for video/joystick.
+    
+    {   // 1) Drain raw SDL events
+        SDL_Event e;
+        while (SDL_PollEvent(&e)) {
+            // discard
+        }
+    }
 
+    // 2) Purge GamepadController’s queued clicks
+    pad.update(sharedState);
+    pad.pollEvents();  // drop them on the floor
+
+    // 3) Empty your main queue of any boot‐phase events
+    {
+        std::lock_guard<std::mutex> lk(eventQueueMutex);
+        while (!gamepadEventQueue.empty()) {
+            gamepadEventQueue.pop();
+        }
+    }
+    
     if (!initGraphics()) return 1;
 
     static WalkCycle walkCycle3Set({ {0, 2, 4}, {1, 3, 5} }, 1.f, 1.0f, 1.0f);
